@@ -1,0 +1,28 @@
+<section id="whsource" data-transition="fade" style="background:#F6F4EE; color:#1C2B27; font-family:'Heebo', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; align-items:stretch; gap:32px">
+<p style="font-size:26px; font-weight:700; color:#0E7A45; text-align:right; letter-spacing:1px">&#x202B;Webhooks · מאיפה מביאים כתובת&#x202C;</p>
+<h2 style="font-family:'Rubik', Arial, sans-serif; font-size:60px; font-weight:700; line-height:1.15; text-align:right; color:#0F2A24">&#x202B;Callback URL היא הכתובת של השרת שלכם&#x202C;</h2>
+<p style="font-size:28px; color:#3D4A46; text-align:right; line-height:1.45">&#x202B;לשם Meta שולחת כל הודעה נכנסת וכל עדכון סטטוס. <b>Verify token</b> הוא סיסמה שאתם ממציאים ורושמים גם בשרת וגם כאן&#x202C;</p>
+<div style="display:flex; flex-direction:row-reverse; gap:24px">
+<div style="flex:1; display:flex; flex-direction:column; gap:12px; background:#0F2A24; border-radius:20px; padding:32px">
+<p style="font-size:24px; font-weight:700; color:#25D366; text-align:right">&#x202B;הכי פשוט&#x202C;</p>
+<h3 style="font-family:'Rubik', Arial, sans-serif; font-size:34px; font-weight:700; color:#F6F4EE; text-align:right">&#x202B;פלטפורמת אוטומציה&#x202C;</h3>
+<p style="font-size:26px; color:#BFD8D0; text-align:right; line-height:1.45">&#x202B;n8n או Make נותנות כתובת מוכנה ומטפלות באימות. מעתיקים את הכתובת לשדה Callback URL&#x202C;</p>
+</div>
+<div style="flex:1; display:flex; flex-direction:column; gap:12px; background:#FFFFFF; border:1px solid #DCE3DF; border-radius:20px; padding:32px">
+<p style="font-size:24px; font-weight:700; color:#0E7A45; text-align:right">&#x202B;לפרודקשן&#x202C;</p>
+<h3 style="font-family:'Rubik', Arial, sans-serif; font-size:34px; font-weight:700; color:#0F2A24; text-align:right">&#x202B;שרת משלכם&#x202C;</h3>
+<p style="font-size:26px; color:#3D4A46; text-align:right; line-height:1.45">&#x202B;Endpoint שמחזיר hub.challenge בבקשת GET ומקבל הודעות ב-POST. מארחים ב-Render, Railway, Vercel או Cloudflare&#x202C;</p>
+</div>
+<div style="flex:1; display:flex; flex-direction:column; gap:12px; background:#FFFFFF; border:1px solid #DCE3DF; border-radius:20px; padding:32px">
+<p style="font-size:24px; font-weight:700; color:#B5561B; text-align:right">&#x202B;לבדיקות בלבד&#x202C;</p>
+<h3 style="font-family:'Rubik', Arial, sans-serif; font-size:34px; font-weight:700; color:#0F2A24; text-align:right">&#x202B;מהמחשב שלכם&#x202C;</h3>
+<p style="font-size:26px; color:#3D4A46; text-align:right; line-height:1.45">&#x202B;ngrok או Cloudflare Tunnel הופכים שרת מקומי לכתובת HTTPS זמנית. נסגר כשהמחשב נכבה&#x202C;</p>
+</div>
+</div>
+<div style="display:flex; flex-direction:row-reverse; gap:20px; align-items:center; background:#FBEBDD; border-radius:16px; padding:20px 28px">
+<x-icon name="Warning" style="color:#B5561B; width:44px; height:44px"></x-icon>
+<p style="flex:1; font-size:26px; color:#1C2B27; text-align:right; line-height:1.4">&#x202B;<b>הודעות אמיתיות מגיעות רק לאפליקציה במצב Published.</b> עד אז מגיעים רק webhooks של בדיקה מהדשבורד&#x202C;</p>
+</div>
+<p style="position:absolute; left:128px; right:128px; bottom:64px; font-size:24px; color:#6B7A75; text-align:right">&#x202B;מודול 2 · הכתובת חייבת להיות HTTPS עם תעודה תקינה&#x202C;</p>
+<aside>זו השאלה הראשונה שכל משתתף שואל מול השדה הריק. Callback URL הוא לא משהו ש-Meta נותנת, זו הכתובת של הבוט שלכם. דרך פלטפורמת אוטומציה (למשל ה-WhatsApp Trigger של n8n) הפלטפורמה מייצרת כתובת ועונה ל-challenge בעצמה. בשרת משלכם צריך לכתוב את זה: בבקשת GET לבדוק ש-hub.verify_token שווה לסיסמה שבחרתם ולהחזיר את hub.challenge כמו שהוא. האזהרה על Published מופיעה בדשבורד עצמו, והיא הסיבה הנפוצה ל"הבוט לא מקבל הודעות".</aside>
+</section>

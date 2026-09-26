@@ -1,0 +1,15 @@
+<section id="s_webhook" data-transition="fade" style="background:#E9EFEB; color:#1C2B27; font-family:'Heebo', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; align-items:stretch; gap:28px">
+<p style="font-size:26px; font-weight:700; color:#0E7A45; text-align:right; letter-spacing:1px">&#x202B;צילום מסך · Configuration ← Webhook fields&#x202C;</p>
+<h2 style="font-family:'Rubik', Arial, sans-serif; font-size:52px; font-weight:700; line-height:1.15; text-align:right; color:#0F2A24">&#x202B;ככה נראית הודעה שהבוט מקבל&#x202C;</h2>
+<div style="flex:1; display:flex; flex-direction:row-reverse; gap:40px; align-items:flex-start">
+<div style="flex:1; display:flex; flex-direction:column; gap:24px">
+<img src="/_blob/301f7bac15186462cb5c69a0ae5b2c97" alt="טבלת Webhook fields עם messages במצב Subscribed ושדות אחרים Unsubscribed, גרסה v26.0" style="width:1100px; height:419px; object-fit:contain; background:#FFFFFF; border-radius:16px; box-shadow:0 12px 40px rgba(15,42,36,0.12)">
+<p style="font-size:26px; color:#1C2B27; text-align:right; line-height:1.45">&#x202B;לבוט מספיק <b>messages</b> במצב Subscribed. הגרסה נבחרת לכל שדה&#x202C;</p>
+<p style="font-size:26px; color:#1C2B27; text-align:right; line-height:1.45">&#x202B;מה הבוט קורא: <b>phone_number_id</b> לאיזה מספר, <b>from</b> ממי, <b>text.body</b> מה נכתב, <b>id</b> לסינון כפילויות&#x202C;</p>
+<p style="font-size:26px; color:#B5561B; font-weight:700; text-align:right; line-height:1.45">&#x202B;חדש: שמות משתמש ב-WhatsApp. לשמור גם <b>user_id</b> (BSUID), כי לא לכל לקוח יהיה מספר&#x202C;</p>
+</div>
+<img src="/_blob/b02ca6a9955db92b223c3421032d1b13" alt="Payload של הודעה נכנסת עם הטקסט שלום. פרטי השולח מטושטשים" style="width:360px; height:625px; object-fit:contain; background:#F4F4F4; border-radius:16px; box-shadow:0 12px 40px rgba(15,42,36,0.12)">
+</div>
+<p style="position:absolute; left:128px; right:128px; bottom:64px; font-size:24px; color:#6B7A75; text-align:right">&#x202B;מודול 2 · פרטי השולח מטושטשים בכוונה&#x202C;</p>
+<aside>ה-payload מימין הוא הודעת "שלום" אמיתית שנשלחה מהטלפון למספר הטסט, כמו שהיא מופיעה ב-Check test webhooks. הודעה אחת שיוצאת מייצרת כמה webhooks של סטטוס: sent, delivered, read. ב-payload מופיעים גם user_id ו-from_user_id. זה ה-BSUID (Business-Scoped User ID): WhatsApp מוסיפה שמות משתמש, ולקוח שכותב עם שם משתמש לא חושף מספר טלפון. בוט שמזהה לקוחות רק לפי from יפספס אותם, ולכן שומרים גם את user_id. ב-WhatsApp Manager מופיעה הודעה שמזמינה לשריין שם משתמש לעסק.</aside>
+</section>

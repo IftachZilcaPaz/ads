@@ -1,0 +1,24 @@
+<section id="m_id" data-transition="fade" style="background:#E8ECF4; color:#1B2436; font-family:'Heebo', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; align-items:stretch; gap:28px">
+<p style="font-size:26px; font-weight:700; color:#1461C9; text-align:right; letter-spacing:1px">Ad account ID</p>
+<h2 style="font-family:'Rubik', Arial, sans-serif; font-size:52px; font-weight:700; line-height:1.15; text-align:right; color:#101B33">&#x202B;איפה מוצאים את מספר חשבון המודעות&#x202C;</h2>
+<div style="flex:1; display:flex; flex-direction:row-reverse; gap:36px; align-items:flex-start">
+<div style="flex:1; display:flex; flex-direction:column; gap:18px">
+<div style="display:flex; flex-direction:column; gap:6px; background:#FFFFFF; border:1px solid #DCE1EC; border-radius:14px; padding:18px 22px">
+<h3 style="font-family:'Rubik', Arial, sans-serif; font-size:28px; font-weight:700; color:#101B33; text-align:right">&#x202B;1 · Ads Manager&#x202C;</h3>
+<p style="font-size:24px; color:#1B2436; text-align:right; line-height:1.4">&#x202B;adsmanager.facebook.com ← התפריט של חשבון המודעות בפינה השמאלית העליונה. המספר מתחת לשם. הוא מופיע גם בכתובת, אחרי act=&#x202C;</p>
+</div>
+<div style="display:flex; flex-direction:column; gap:6px; background:#FFFFFF; border:1px solid #DCE1EC; border-radius:14px; padding:18px 22px">
+<h3 style="font-family:'Rubik', Arial, sans-serif; font-size:28px; font-weight:700; color:#101B33; text-align:right">&#x202B;2 · Business Settings&#x202C;</h3>
+<p style="font-size:24px; color:#1B2436; text-align:right; line-height:1.4">&#x202B;business.facebook.com ← Settings ← Accounts ← Ad accounts ← לבחור חשבון. ה-ID מופיע בראש הפרטים&#x202C;</p>
+</div>
+<div style="display:flex; flex-direction:column; gap:6px; background:#FFFFFF; border:1px solid #DCE1EC; border-radius:14px; padding:18px 22px">
+<h3 style="font-family:'Rubik', Arial, sans-serif; font-size:28px; font-weight:700; color:#101B33; text-align:right">&#x202B;3 · לשאול את Claude&#x202C;</h3>
+<p style="font-size:24px; color:#1B2436; text-align:right; line-height:1.4">&#x202B;"אילו חשבונות מודעות יש לי גישה אליהם?" הכלי ads_get_ad_accounts מחזיר שם ו-ID לכל חשבון&#x202C;</p>
+</div>
+<p style="font-size:26px; color:#B5561B; font-weight:700; text-align:right; line-height:1.4">&#x202B;מזינים רק את המספרים, בלי act_&#x202C;</p>
+</div>
+<img src="/_blob/d0812183256915403cc108d56c24fdc0" alt="חלון Enter prompt inputs של analyze_ads_performance עם שדה Ad_account_id: numeric string, no act_ prefix" style="width:760px; height:406px; object-fit:contain; background:#1B1B1B; border-radius:16px; box-shadow:0 12px 40px rgba(16,27,51,0.18)">
+</div>
+<p style="position:absolute; left:128px; right:128px; bottom:64px; font-size:24px; color:#6B7690; text-align:right">&#x202B;Meta Ads MCP · שימוש ראשון&#x202C;</p>
+<aside>ה-ID הוא מספר ארוך של 15 עד 16 ספרות בערך. ב-Marketing API הוא נכתב עם הקידומת act_, אבל ה-prompt של Meta מבקש אותו בלי הקידומת. הדרך הכי מהירה בסשן היא דרך 3: לבקש מ-Claude רשימה של החשבונות, להעתיק את ה-ID מהתשובה ולהדביק ב-prompt.</aside>
+</section>
