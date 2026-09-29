@@ -23,7 +23,7 @@ import {
   type PostAction,
   type PostChanges,
 } from '../shared/post.ts';
-import { a1, type SheetsClient } from './sheets.ts';
+import { a1, type SheetsPort } from './sheets.ts';
 import { ConflictError, diffUpdates, ensureTabs, findRow, parseGrid, rowValues, type Table, type TabSpec } from './table.ts';
 
 export const TABS = {
@@ -73,7 +73,7 @@ function kvRecord(table: Table): Record<string, string> {
 export class Store {
   private schemaReady: Promise<void> | null = null;
 
-  constructor(private readonly sheets: SheetsClient) {}
+  constructor(private readonly sheets: SheetsPort) {}
 
   private ensureSchema(): Promise<void> {
     this.schemaReady ??= ensureTabs(this.sheets, SPECS).catch((err: unknown) => {

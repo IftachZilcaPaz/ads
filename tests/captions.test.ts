@@ -46,7 +46,7 @@ describe('caption prompt', () => {
   it('resizes Cloudinary media for the model', () => {
     expect(modelImageUrl(IMG)).toBe('https://res.cloudinary.com/demo/image/upload/w_1280,c_limit,q_auto,f_jpg/v17/folder/pic.png');
     expect(modelImageUrl('https://res.cloudinary.com/demo/video/upload/v1/clip.mp4')).toBe(
-      'https://res.cloudinary.com/demo/video/upload/so_1,w_1024,c_limit/v1/clip.jpg',
+      'https://res.cloudinary.com/demo/video/upload/so_1,w_1280,c_limit/v1/clip.jpg',
     );
     expect(modelImageUrl('https://example.com/a.jpg')).toBe('https://example.com/a.jpg');
   });

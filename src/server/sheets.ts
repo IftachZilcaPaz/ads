@@ -35,12 +35,21 @@ export function columnLetter(index: number): string {
   return out;
 }
 
+/** The spreadsheet operations the app depends on (Google or in-memory). */
+export interface SheetsPort {
+  sheetTitles(): Promise<string[]>;
+  addSheets(titles: string[]): Promise<void>;
+  batchGet(ranges: string[]): Promise<string[][][]>;
+  batchUpdate(data: CellUpdate[]): Promise<void>;
+  append(range: string, rows: string[][]): Promise<void>;
+}
+
 /**
  * Minimal Sheets v4 REST client. Writes use valueInputOption=RAW so user text
  * is stored verbatim: no formula injection ("=IMPORTXML(...)") and no
  * auto-conversion of "2026-09-01 18:30" into a locale-dependent date cell.
  */
-export class SheetsClient {
+export class SheetsClient implements SheetsPort {
   constructor(
     private readonly spreadsheetId: string,
     private readonly tokens: TokenProvider,

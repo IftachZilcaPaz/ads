@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApi } from '../src/server/api.ts';
-import { SheetsClient, a1, columnLetter, type CellUpdate } from '../src/server/sheets.ts';
+import { MemorySheets } from '../src/server/memory-sheets.ts';
+import { a1, columnLetter } from '../src/server/sheets.ts';
 import { createSessionToken, secretsEqual, verifySessionToken, SESSION_COOKIE } from '../src/server/session.ts';
 import { Store } from '../src/server/store.ts';
 import { parseServiceAccount, signServiceAccountJwt } from '../src/server/google-auth.ts';
@@ -8,47 +9,8 @@ import { parseServiceAccount, signServiceAccountJwt } from '../src/server/google
 const SECRET = 'x'.repeat(40);
 const IMG = 'https://res.cloudinary.com/demo/image/upload/v1/a.jpg';
 
-/** In-memory spreadsheet speaking the SheetsClient surface Store relies on. */
-class FakeSheets {
-  tabs = new Map<string, string[][]>();
-  writes: CellUpdate[] = [];
-
-  private tabOf(range: string): string {
-    return /^'((?:[^']|'')+)'/.exec(range)![1]!.replace(/''/g, "'");
-  }
-  async sheetTitles() {
-    return [...this.tabs.keys()];
-  }
-  async addSheets(titles: string[]) {
-    for (const t of titles) this.tabs.set(t, []);
-  }
-  async batchGet(ranges: string[]) {
-    return ranges.map((r) => {
-      const grid = this.tabs.get(this.tabOf(r)) ?? [];
-      return r.endsWith('!1:1') ? grid.slice(0, 1) : grid.map((row) => [...row]);
-    });
-  }
-  async batchUpdate(data: CellUpdate[]) {
-    for (const u of data) {
-      this.writes.push(u);
-      const grid = this.tabs.get(this.tabOf(u.range))!;
-      const m = /!([A-Z]+)(\d+)/.exec(u.range)!;
-      let col = 0;
-      for (const ch of m[1]!) col = col * 26 + (ch.charCodeAt(0) - 64);
-      const row = Number(m[2]) - 1;
-      u.values[0]!.forEach((v, i) => {
-        grid[row] ??= [];
-        grid[row]![col - 1 + i] = v;
-      });
-    }
-  }
-  async append(range: string, rows: string[][]) {
-    this.tabs.get(this.tabOf(range))!.push(...rows.map((r) => [...r]));
-  }
-}
-
 function setup() {
-  const sheets = new FakeSheets();
+  const sheets = new MemorySheets();
   // A legacy spreadsheet: original 9 columns, config tab with secrets.
   sheets.tabs.set('calendar', [
     ['id', 'publish_at', 'type', 'media_urls', 'caption', 'approval_mode', 'status', 'ig_media_id', 'error'],
@@ -62,7 +24,7 @@ function setup() {
     ['cloudinary_cloud', 'demo'],
     ['cloudinary_preset', 'unsigned'],
   ]);
-  const store = new Store(sheets as unknown as SheetsClient);
+  const store = new Store(sheets);
   return { sheets, store };
 }
 

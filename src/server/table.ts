@@ -1,4 +1,4 @@
-import { a1, columnLetter, type CellUpdate, type SheetsClient } from './sheets.ts';
+import { a1, columnLetter, type CellUpdate, type SheetsPort } from './sheets.ts';
 
 export interface TableRow {
   /** 1-based sheet row number (row 1 is the header). */
@@ -71,7 +71,7 @@ export interface TabSpec {
  * Creates missing tabs and appends missing header columns, so upgrading an
  * existing spreadsheet needs no manual migration. Never reorders or removes.
  */
-export async function ensureTabs(sheets: SheetsClient, specs: TabSpec[]): Promise<void> {
+export async function ensureTabs(sheets: SheetsPort, specs: TabSpec[]): Promise<void> {
   const existing = new Set(await sheets.sheetTitles());
   await sheets.addSheets(specs.filter((s) => !existing.has(s.name)).map((s) => s.name));
 

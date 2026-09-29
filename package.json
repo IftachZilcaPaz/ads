@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "check": "npm run typecheck && npm run test && npm run build",
-    "n8n:build": "node scripts/build-n8n.mjs"
+    "n8n:build": "node scripts/build-n8n.mjs",
+    "dev:api": "node --experimental-transform-types --no-warnings scripts/dev-api.ts"
   },
   "repository": {
     "type": "git",

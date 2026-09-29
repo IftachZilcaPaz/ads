@@ -11,6 +11,7 @@ export default defineConfig({
     sourcemap: true,
   },
   server: {
-    proxy: { '/api': 'http://localhost:8888' },
+    // Regex key: a plain '/api' prefix would also swallow the module '/api.ts'.
+    proxy: { '^/api/': { target: 'http://localhost:8888', xfwd: true } },
   },
 });

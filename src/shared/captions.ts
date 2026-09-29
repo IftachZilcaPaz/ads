@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { BrandSchema, CampaignSchema, ProductSchema, splitHashtags, type Brand, type Campaign, type Product } from './catalog.ts';
+import { cloudinaryStill } from './media.ts';
 import { IG_LIMITS, POST_TYPES } from './post.ts';
 
 export const MAX_IMAGES_FOR_MODEL = 4;
@@ -47,17 +48,11 @@ export function composeCaption(variant: Pick<CaptionVariant, 'caption' | 'hashta
 }
 
 /**
- * Cloudinary can resize on the fly; the model does not need full-resolution
- * uploads, and a video URL becomes a still frame the model can see.
+ * The model does not need full-resolution uploads, and a video URL becomes a
+ * still frame the model can see.
  */
 export function modelImageUrl(url: string): string {
-  const m = /^(https:\/\/res\.cloudinary\.com\/[^/]+)\/(image|video)\/upload\/(.+)$/.exec(url);
-  if (!m) return url;
-  const [, base, kind, rest] = m as unknown as [string, string, string, string];
-  if (kind === 'video') {
-    return `${base}/video/upload/so_1,w_1024,c_limit/${rest.replace(/\.[a-z0-9]+(\?.*)?$/i, '')}.jpg`;
-  }
-  return `${base}/image/upload/w_1280,c_limit,q_auto,f_jpg/${rest}`;
+  return cloudinaryStill(url, 1280);
 }
 
 const LENGTH_GUIDE = {
