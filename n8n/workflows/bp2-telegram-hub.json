@@ -1,0 +1,1697 @@
+{
+  "name": "BP 2 - Telegram Hub",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message",
+          "callback_query"
+        ],
+        "additionalFields": {}
+      },
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        352
+      ],
+      "webhookId": "63215956-13f4-4c3f-90a4-d747840135b1",
+      "credentials": {
+        "telegramApi": {
+          "id": "gQQT4wEAXLPFc22J",
+          "name": "ReynovationSocial"
+        }
+      },
+      "id": "ad689b0e-7928-4501-a0b1-feabcd9e48ef"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "__SPREADSHEET_ID__",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "config",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "name": "Load Config",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        224,
+        352
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "uuI7RITinapm2k9h",
+          "name": "ReynovationSocial"
+        }
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "id": "bdf2c761-3fdb-4a0e-aee1-deb2d7978eeb"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ---- shared helpers (inlined into every code node by scripts/build-n8n.mjs) ----\nconst TZ = 'Asia/Jerusalem';\nconst LOCAL_RE = /^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}$/;\n\n/** Israel wall-clock \"YYYY-MM-DD HH:mm\"; comparable as plain strings. */\nconst toLocal = (date = new Date()) =>\n  new Intl.DateTimeFormat('sv-SE', {\n    timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit',\n    hour: '2-digit', minute: '2-digit', hour12: false,\n  }).format(date).replace(' 24:', ' 00:');\n\nconst addMinutesLocal = (value, minutes) => {\n  const [d, t] = value.split(' ');\n  const [y, m, day] = d.split('-').map(Number);\n  const [hh, mm] = t.split(':').map(Number);\n  return new Date(Date.UTC(y, m - 1, day, hh, mm + minutes)).toISOString().slice(0, 16).replace('T', ' ');\n};\n\n/** key/value rows of the `config` tab → object. */\nconst loadConfig = (nodeName = 'Load Config') => {\n  const cfg = {};\n  for (const it of $(nodeName).all()) {\n    if (it.json.key) cfg[String(it.json.key).trim()] = String(it.json.value ?? '').trim();\n  }\n  return cfg;\n};\n\nconst str = (v) => String(v ?? '').trim();\nconst cleanCaption = (s) => String(s ?? '').replace(/[—–]/g, '-');\nconst mediaList = (s) => str(s).split(/[\\s,]+/).filter(Boolean);\nconst isVideoUrl = (u) => /\\.(mp4|mov|m4v|webm)(\\?|#|$)/i.test(u) || /\\/video\\/upload\\//.test(u);\n\n/** Approved = explicit approval stamp, or a standing \"auto\" approval. */\nconst isApproved = (r) => str(r.approval_mode) === 'auto' || str(r.approved_at) !== '';\n\n/** Small JPEG still of a Cloudinary image/video (Telegram previews, thumbnails). */\nconst cloudinaryStill = (url, width = 1080) => {\n  const m = /^(https:\\/\\/res\\.cloudinary\\.com\\/[^/]+)\\/(image|video)\\/upload\\/(.+)$/.exec(url || '');\n  if (!m) return url || '';\n  if (m[2] === 'video') return `${m[1]}/video/upload/so_1,w_${width},c_limit/${m[3].replace(/\\.[a-z0-9]+(\\?.*)?$/i, '')}.jpg`;\n  return `${m[1]}/image/upload/w_${width},c_limit,q_auto,f_jpg/${m[3]}`;\n};\n\nconst randomRef = () => Math.random().toString(36).slice(2, 8);\n// ---- end shared helpers ----\n// Only the owner's chat may drive the bot. Anyone else is silently ignored,\n// so strangers cannot create drafts or press approval buttons.\nconst cfg = loadConfig();\nconst update = $('Telegram Trigger').first().json;\nconst owner = str(cfg.telegram_chat_id);\n\nconst cb = update.callback_query;\nconst msg = update.message;\nconst fromChat = str(cb ? cb.message && cb.message.chat && cb.message.chat.id : msg && msg.chat && msg.chat.id);\nif (!owner || fromChat !== owner) return [];\n\nif (cb) {\n  return [{ json: { kind: 'callback', data: str(cb.data), query_id: cb.id, chat_id: fromChat, message_id: cb.message.message_id } }];\n}\n\nconst text = str(msg.caption || msg.text);\nlet file = null;\nif (msg.photo && msg.photo.length) file = { file_id: msg.photo[msg.photo.length - 1].file_id, is_video: false };\nelse if (msg.video) file = { file_id: msg.video.file_id, is_video: true };\nelse if (msg.document && /^(image|video)\\//.test(msg.document.mime_type || '')) {\n  file = { file_id: msg.document.file_id, is_video: /^video\\//.test(msg.document.mime_type) };\n}\n\nif (file) {\n  return [{\n    json: { kind: 'media', ...file, text, chat_id: fromChat, cloudinary_cloud: cfg.cloudinary_cloud || '', cloudinary_preset: cfg.cloudinary_preset || '' },\n  }];\n}\nreturn [{ json: { kind: 'other', text, chat_id: fromChat, app_url: cfg.app_url || '' } }];\n"
+      },
+      "name": "Route Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        352
+      ],
+      "id": "53ab8019-298c-4fa2-a7f6-b7a09db69835"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "003a1bc9-6e93-4f5c-a817-645236bbef8b",
+              "leftValue": "={{ $json.kind }}",
+              "rightValue": "callback",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Is Button?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        672,
+        352
+      ],
+      "id": "3be49c90-75ed-4662-a13f-edcc82471e08"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "__SPREADSHEET_ID__",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "calendar",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "name": "Read Calendar",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        896,
+        0
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "uuI7RITinapm2k9h",
+          "name": "ReynovationSocial"
+        }
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "id": "b39a5f23-a0c5-4158-ad08-f8bf63b6d0b3"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ---- shared helpers (inlined into every code node by scripts/build-n8n.mjs) ----\nconst TZ = 'Asia/Jerusalem';\nconst LOCAL_RE = /^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}$/;\n\n/** Israel wall-clock \"YYYY-MM-DD HH:mm\"; comparable as plain strings. */\nconst toLocal = (date = new Date()) =>\n  new Intl.DateTimeFormat('sv-SE', {\n    timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit',\n    hour: '2-digit', minute: '2-digit', hour12: false,\n  }).format(date).replace(' 24:', ' 00:');\n\nconst addMinutesLocal = (value, minutes) => {\n  const [d, t] = value.split(' ');\n  const [y, m, day] = d.split('-').map(Number);\n  const [hh, mm] = t.split(':').map(Number);\n  return new Date(Date.UTC(y, m - 1, day, hh, mm + minutes)).toISOString().slice(0, 16).replace('T', ' ');\n};\n\n/** key/value rows of the `config` tab → object. */\nconst loadConfig = (nodeName = 'Load Config') => {\n  const cfg = {};\n  for (const it of $(nodeName).all()) {\n    if (it.json.key) cfg[String(it.json.key).trim()] = String(it.json.value ?? '').trim();\n  }\n  return cfg;\n};\n\nconst str = (v) => String(v ?? '').trim();\nconst cleanCaption = (s) => String(s ?? '').replace(/[—–]/g, '-');\nconst mediaList = (s) => str(s).split(/[\\s,]+/).filter(Boolean);\nconst isVideoUrl = (u) => /\\.(mp4|mov|m4v|webm)(\\?|#|$)/i.test(u) || /\\/video\\/upload\\//.test(u);\n\n/** Approved = explicit approval stamp, or a standing \"auto\" approval. */\nconst isApproved = (r) => str(r.approval_mode) === 'auto' || str(r.approved_at) !== '';\n\n/** Small JPEG still of a Cloudinary image/video (Telegram previews, thumbnails). */\nconst cloudinaryStill = (url, width = 1080) => {\n  const m = /^(https:\\/\\/res\\.cloudinary\\.com\\/[^/]+)\\/(image|video)\\/upload\\/(.+)$/.exec(url || '');\n  if (!m) return url || '';\n  if (m[2] === 'video') return `${m[1]}/video/upload/so_1,w_${width},c_limit/${m[3].replace(/\\.[a-z0-9]+(\\?.*)?$/i, '')}.jpg`;\n  return `${m[1]}/image/upload/w_${width},c_limit,q_auto,f_jpg/${m[3]}`;\n};\n\nconst randomRef = () => Math.random().toString(36).slice(2, 8);\n// ---- end shared helpers ----\n// Interprets an approve/reject button press. Buttons carry \"action:id:ref\";\n// the ref must match the row's current approval_ref, so a stale message (the\n// post was edited, re-requested or already handled) can never approve content\n// you did not see.\nconst input = $('Route Update').first().json;\nconst [action, id, ref = ''] = input.data.split(':');\nconst row = $('Read Calendar').all().map((i) => i.json).find((r) => str(r.id) === id);\nconst now = toLocal();\n\nconst result = (decision, answer, edit) => [{\n  json: {\n    ...(row || {}),\n    id,\n    decision,\n    answer,\n    edit_text: edit || answer,\n    query_id: input.query_id,\n    chat_id: input.chat_id,\n    message_id: input.message_id,\n    approved_at: decision === 'publish_now' || decision === 'approve_later' ? now : str(row && row.approved_at),\n  },\n}];\n\nif (!row) return result('stale', 'הפוסט לא נמצא בלוח', `⚠️ ${id}: הפוסט לא נמצא בלוח`);\nconst status = str(row.status);\nconst validRef = str(row.approval_ref) === ref;\nif (status !== 'pending_approval' || !validRef) {\n  return result('stale', 'הבקשה הזאת כבר לא בתוקף', `⚠️ ${id}: הבקשה כבר לא בתוקף (סטטוס: ${status}). אם צריך - אשר מהלוח.`);\n}\nif (action === 'reject') return result('reject', 'נדחה', `❌ ${id} נדחה וחזר ללוח לעריכה`);\nif (action !== 'approve') return result('stale', 'פעולה לא מוכרת');\n\nconst when = str(row.publish_at);\nif (!LOCAL_RE.test(when) || when <= now) {\n  return result('publish_now', 'מאושר - מפרסם עכשיו', `⏳ ${id} אושר - מפרסם עכשיו...`);\n}\nreturn result('approve_later', 'מאושר ✅', `✅ ${id} אושר ויעלה ב-${when}`);\n"
+      },
+      "name": "Decide",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        0
+      ],
+      "id": "0d1ddef8-946c-4701-a476-9c1ed7f12c14"
+    },
+    {
+      "parameters": {
+        "resource": "callback",
+        "operation": "answerQuery",
+        "queryId": "={{ $('Decide').first().json.query_id }}",
+        "additionalFields": {
+          "text": "={{ $('Decide').first().json.answer }}"
+        }
+      },
+      "name": "Answer Button",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1344,
+        0
+      ],
+      "webhookId": "570883ca-561b-4edb-a574-72cc46d7fe76",
+      "credentials": {
+        "telegramApi": {
+          "id": "gQQT4wEAXLPFc22J",
+          "name": "ReynovationSocial"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "id": "1f0a03fe-a1e6-4356-ac2d-1a89fd1c79c3"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "7c11f891-6cc8-4dc5-a2cf-58ca226a307c",
+              "leftValue": "={{ $('Decide').first().json.decision }}",
+              "rightValue": "stale",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Stale?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1568,
+        0
+      ],
+      "id": "ab029cca-e7da-496a-ac48-f900c9546a1c"
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $('Decide').first().json.chat_id }}",
+        "messageId": "={{ $('Decide').first().json.message_id }}",
+        "text": "={{ $('Decide').first().json.edit_text }}",
+        "additionalFields": {
+          "disable_web_page_preview": true
+        }
+      },
+      "name": "Edit (Stale)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1792,
+        176
+      ],
+      "webhookId": "38baa1f6-26aa-4be8-a503-7654eba4e329",
+      "credentials": {
+        "telegramApi": {
+          "id": "gQQT4wEAXLPFc22J",
+          "name": "ReynovationSocial"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "id": "825ca4d7-a20c-4268-af99-6e008ff26890"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "__SPREADSHEET_ID__",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "calendar",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $('Decide').first().json.id }}",
+            "status": "={{ $('Decide').first().json.decision === 'publish_now' ? 'publishing' : $('Decide').first().json.status }}",
+            "approval_ref": "=claim:{{ $execution.id }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "approval_ref",
+              "displayName": "approval_ref",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "name": "Claim",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1792,
+        0
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "uuI7RITinapm2k9h",
+          "name": "ReynovationSocial"
+        }
+      },
+      "id": "8ed22db6-8708-4c8e-adf5-e3ad137ee40b"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "__SPREADSHEET_ID__",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "calendar",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "name": "Re-read Calendar",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2016,
+        0
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "uuI7RITinapm2k9h",
+          "name": "ReynovationSocial"
+        }
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "id": "21ee619f-cb08-4de4-aca2-30fbf482fce1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ---- shared helpers (inlined into every code node by scripts/build-n8n.mjs) ----\nconst TZ = 'Asia/Jerusalem';\nconst LOCAL_RE = /^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}$/;\n\n/** Israel wall-clock \"YYYY-MM-DD HH:mm\"; comparable as plain strings. */\nconst toLocal = (date = new Date()) =>\n  new Intl.DateTimeFormat('sv-SE', {\n    timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit',\n    hour: '2-digit', minute: '2-digit', hour12: false,\n  }).format(date).replace(' 24:', ' 00:');\n\nconst addMinutesLocal = (value, minutes) => {\n  const [d, t] = value.split(' ');\n  const [y, m, day] = d.split('-').map(Number);\n  const [hh, mm] = t.split(':').map(Number);\n  return new Date(Date.UTC(y, m - 1, day, hh, mm + minutes)).toISOString().slice(0, 16).replace('T', ' ');\n};\n\n/** key/value rows of the `config` tab → object. */\nconst loadConfig = (nodeName = 'Load Config') => {\n  const cfg = {};\n  for (const it of $(nodeName).all()) {\n    if (it.json.key) cfg[String(it.json.key).trim()] = String(it.json.value ?? '').trim();\n  }\n  return cfg;\n};\n\nconst str = (v) => String(v ?? '').trim();\nconst cleanCaption = (s) => String(s ?? '').replace(/[—–]/g, '-');\nconst mediaList = (s) => str(s).split(/[\\s,]+/).filter(Boolean);\nconst isVideoUrl = (u) => /\\.(mp4|mov|m4v|webm)(\\?|#|$)/i.test(u) || /\\/video\\/upload\\//.test(u);\n\n/** Approved = explicit approval stamp, or a standing \"auto\" approval. */\nconst isApproved = (r) => str(r.approval_mode) === 'auto' || str(r.approved_at) !== '';\n\n/** Small JPEG still of a Cloudinary image/video (Telegram previews, thumbnails). */\nconst cloudinaryStill = (url, width = 1080) => {\n  const m = /^(https:\\/\\/res\\.cloudinary\\.com\\/[^/]+)\\/(image|video)\\/upload\\/(.+)$/.exec(url || '');\n  if (!m) return url || '';\n  if (m[2] === 'video') return `${m[1]}/video/upload/so_1,w_${width},c_limit/${m[3].replace(/\\.[a-z0-9]+(\\?.*)?$/i, '')}.jpg`;\n  return `${m[1]}/image/upload/w_${width},c_limit,q_auto,f_jpg/${m[3]}`;\n};\n\nconst randomRef = () => Math.random().toString(36).slice(2, 8);\n// ---- end shared helpers ----\n// After claiming the row, make sure this execution still owns it, then carry\n// the decision forward (single callback per execution).\nconst claim = `claim:${$execution.id}`;\nconst decided = $('Decide').first().json;\nconst row = $('Re-read Calendar').all().map((i) => i.json).find((r) => str(r.id) === decided.id);\nif (!row || str(row.approval_ref) !== claim) {\n  return [{ json: { ...decided, decision: 'stale', edit_text: `⚠️ ${decided.id}: הבקשה טופלה כבר (לחיצה כפולה?)` } }];\n}\nconst cfg = loadConfig();\nreturn [{\n  json: {\n    ...row,\n    ...decided,\n    caption: cleanCaption(row.caption),\n    media_urls: row.media_urls,\n    ig_user_id: cfg.ig_user_id,\n    access_token: cfg.access_token,\n  },\n}];\n"
+      },
+      "name": "Verify Claim",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        0
+      ],
+      "id": "c03d0c5e-ce03-4e18-aea2-0f0025ec6dba"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "695cc005-68e6-4e5d-a8c2-d26328fb8ad7",
+              "leftValue": "={{ $json.decision }}",
+              "rightValue": "publish_now",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Publish Now?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2464,
+        0
+      ],
+      "id": "4ee44256-affa-46cf-a6b4-38d2fadc47a0"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// ---- shared helpers (inlined into every code node by scripts/build-n8n.mjs) ----\nconst TZ = 'Asia/Jerusalem';\nconst LOCAL_RE = /^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}$/;\n\n/** Israel wall-clock \"YYYY-MM-DD HH:mm\"; comparable as plain strings. */\nconst toLocal = (date = new Date()) =>\n  new Intl.DateTimeFormat('sv-SE', {\n    timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit',\n    hour: '2-digit', minute: '2-digit', hour12: false,\n  }).format(date).replace(' 24:', ' 00:');\n\nconst addMinutesLocal = (value, minutes) => {\n  const [d, t] = value.split(' ');\n  const [y, m, day] = d.split('-').map(Number);\n  const [hh, mm] = t.split(':').map(Number);\n  return new Date(Date.UTC(y, m - 1, day, hh, mm + minutes)).toISOString().slice(0, 16).replace('T', ' ');\n};\n\n/** key/value rows of the `config` tab → object. */\nconst loadConfig = (nodeName = 'Load Config') => {\n  const cfg = {};\n  for (const it of $(nodeName).all()) {\n    if (it.json.key) cfg[String(it.json.key).trim()] = String(it.json.value ?? '').trim();\n  }\n  return cfg;\n};\n\nconst str = (v) => String(v ?? '').trim();\nconst cleanCaption = (s) => String(s ?? '').replace(/[—–]/g, '-');\nconst mediaList = (s) => str(s).split(/[\\s,]+/).filter(Boolean);\nconst isVideoUrl = (u) => /\\.(mp4|mov|m4v|webm)(\\?|#|$)/i.test(u) || /\\/video\\/upload\\//.test(u);\n\n/** Approved = explicit approval stamp, or a standing \"auto\" approval. */\nconst isApproved = (r) => str(r.approval_mode) === 'auto' || str(r.approved_at) !== '';\n\n/** Small JPEG still of a Cloudinary image/video (Telegram previews, thumbnails). */\nconst cloudinaryStill = (url, width = 1080) => {\n  const m = /^(https:\\/\\/res\\.cloudinary\\.com\\/[^/]+)\\/(image|video)\\/upload\\/(.+)$/.exec(url || '');\n  if (!m) return url || '';\n  if (m[2] === 'video') return `${m[1]}/video/upload/so_1,w_${width},c_limit/${m[3].replace(/\\.[a-z0-9]+(\\?.*)?$/i, '')}.jpg`;\n  return `${m[1]}/image/upload/w_${width},c_limit,q_auto,f_jpg/${m[3]}`;\n};\n\nconst randomRef = () => Math.random().toString(36).slice(2, 8);\n// ---- end shared helpers ----\n// Publishes ONE item to Instagram via the Graph API. Never throws: returns\n// status \"published\" or \"failed\" with Meta's real error message.\nconst j = $json;\nconst token = j.access_token;\nconst igId = j.ig_user_id;\nconst G = 'https://graph.facebook.com/v26.0';\n\n// Already on Instagram (double click / retry after partial failure): don't post twice.\nif (str(j.ig_media_id)) {\n  return { json: { ...j, status: 'published', error: '' } };\n}\n\nconst api = async (method, path, qs) => {\n  const res = await this.helpers.httpRequest({\n    method,\n    url: `${G}/${path}`,\n    qs: { ...qs, access_token: token },\n    json: true,\n    returnFullResponse: true,\n    ignoreHttpStatusErrors: true,\n  });\n  const body = res && res.body !== undefined ? res.body : res;\n  if (body && body.error) {\n    const er = body.error;\n    throw new Error(`Meta ${er.code || ''}${er.error_subcode ? '/' + er.error_subcode : ''}: ${er.message || JSON.stringify(er)}`);\n  }\n  if (res && res.statusCode >= 400) throw new Error(`HTTP ${res.statusCode}: ${JSON.stringify(body).slice(0, 300)}`);\n  return body;\n};\n\nconst wait = (ms) => new Promise((r) => setTimeout(r, ms));\n\nconst waitReady = async (creationId, everyMs, tries) => {\n  for (let i = 0; i < tries; i++) {\n    const s = await api('GET', creationId, { fields: 'status_code' });\n    if (s.status_code === 'FINISHED') return;\n    if (s.status_code === 'ERROR') throw new Error('Media processing failed');\n    await wait(everyMs);\n  }\n  throw new Error('Timed out waiting for media processing');\n};\n\nconst caption = cleanCaption(j.caption);\nconst urls = mediaList(j.media_urls);\nconst type = str(j.type || 'POST').toUpperCase();\n\ntry {\n  if (!token || !igId) throw new Error('Missing access_token / ig_user_id in config tab');\n  if (!urls.length) throw new Error(`Row ${j.id}: media_urls is empty`);\n\n  let creationId;\n  if (type === 'CAROUSEL') {\n    const children = [];\n    for (const u of urls) {\n      const qs = isVideoUrl(u)\n        ? { media_type: 'VIDEO', video_url: u, is_carousel_item: true }\n        : { image_url: u, is_carousel_item: true };\n      const c = await api('POST', `${igId}/media`, qs);\n      if (isVideoUrl(u)) await waitReady(c.id, 10000, 40);\n      children.push(c.id);\n    }\n    const parent = await api('POST', `${igId}/media`, { media_type: 'CAROUSEL', children: children.join(','), caption });\n    creationId = parent.id;\n  } else if (type === 'REEL') {\n    const c = await api('POST', `${igId}/media`, { media_type: 'REELS', video_url: urls[0], caption });\n    creationId = c.id;\n    await waitReady(creationId, 15000, 40);\n  } else if (type === 'STORY') {\n    const qs = isVideoUrl(urls[0])\n      ? { media_type: 'STORIES', video_url: urls[0] }\n      : { media_type: 'STORIES', image_url: urls[0] };\n    const c = await api('POST', `${igId}/media`, qs);\n    creationId = c.id;\n    if (isVideoUrl(urls[0])) await waitReady(creationId, 15000, 40);\n  } else {\n    const c = await api('POST', `${igId}/media`, { image_url: urls[0], caption });\n    creationId = c.id;\n  }\n\n  // Images also need a moment of processing before publishing (error 9007).\n  await waitReady(creationId, 4000, 30);\n\n  let pub;\n  for (let i = 0; ; i++) {\n    try {\n      pub = await api('POST', `${igId}/media_publish`, { creation_id: creationId });\n      break;\n    } catch (e) {\n      if (i < 5 && /9007|Media ID is not available/.test(String(e.message))) {\n        await wait(5000);\n        continue;\n      }\n      throw e;\n    }\n  }\n\n  let permalink = '';\n  try {\n    permalink = (await api('GET', pub.id, { fields: 'permalink' })).permalink || '';\n  } catch (e) {\n    // Non-fatal: the post is live even if we cannot read its link.\n  }\n  return { json: { ...j, status: 'published', ig_media_id: pub.id, permalink, error: '', updated_at: toLocal() } };\n} catch (e) {\n  return { json: { ...j, status: 'failed', error: String(e.message || e).slice(0, 500), updated_at: toLocal() } };\n}\n"
+      },
+      "name": "Publish to Instagram",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2688,
+        0
+      ],
+      "id": "d8ca55f6-137c-4f09-a645-907e7982122a"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "__SPREADSHEET_ID__",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "calendar",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.id }}",
+            "status": "={{ $json.status }}",
+            "approved_at": "={{ $json.approved_at }}",
+            "ig_media_id": "={{ $json.ig_media_id || \"\" }}",
+            "permalink": "={{ $json.permalink || \"\" }}",
+            "error": "={{ $json.error }}",
+            "approval_ref": "",
+            "updated_at": "={{ $json.updated_at }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "approved_at",
+              "displayName": "approved_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ig_media_id",
+              "displayName": "ig_media_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "permalink",
+              "displayName": "permalink",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "approval_ref",
+              "displayName": "approval_ref",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "name": "Save Result",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2912,
+        0
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "uuI7RITinapm2k9h",
+          "name": "ReynovationSocial"
+        }
+      },
+      "id": "95d0c646-0fde-4e17-ae73-bc0029002581"
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $('Verify Claim').first().json.chat_id }}",
+        "messageId": "={{ $('Verify Claim').first().json.message_id }}",
+        "text": "={{ $('Publish to Instagram').first().json.status === 'published' ? '🎉 ' + $('Publish to Instagram').first().json.id + ' פורסם' + ($('Publish to Instagram').first().json.permalink ? '\\n' + $('Publish to Instagram').first().json.permalink : '') : '🚨 ' + $('Publish to Instagram').first().json.id + ' נכשל: ' + $('Publish to Instagram').first().json.error }}",
+        "additionalFields": {
+          "disable_web_page_preview": true
+        }
+      },
+      "name": "Edit (Published)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3136,
+        0
+      ],
+      "webhookId": "a8127ed6-c77c-4a3e-aef6-d5155176fbef",
+      "credentials": {
+        "telegramApi": {
+          "id": "gQQT4wEAXLPFc22J",
+          "name": "ReynovationSocial"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "id": "d0df7899-5626-4d13-acae-3408b31df0b1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "245d71a5-a3fd-47ec-af1a-a945a3383bac",
+              "leftValue": "={{ $json.decision }}",
+              "rightValue": "approve_later",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Approve Later?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2688,
+        176
+      ],
+      "id": "ef7e115a-e3b6-44cb-a514-8cb769a58343"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "__SPREADSHEET_ID__",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "calendar",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.id }}",
+            "status": "ready",
+            "approved_at": "={{ $json.approved_at }}",
+            "approval_ref": "",
+            "error": "",
+            "updated_at": "={{ $now.setZone('Asia/Jerusalem').toFormat('yyyy-MM-dd HH:mm') }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "approved_at",
+              "displayName": "approved_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "approval_ref",
+              "displayName": "approval_ref",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "name": "Save Approval",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2912,
+        176
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "uuI7RITinapm2k9h",
+          "name": "ReynovationSocial"
+        }
+      },
+      "id": "c324991a-7ade-4036-a2db-11862fe9a675"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "599eb1bf-3fce-4526-a40d-24f3f822eb20",
+              "leftValue": "={{ $json.decision }}",
+              "rightValue": "reject",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Reject?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2912,
+        352
+      ],
+      "id": "4eeffc5b-370d-4582-ad5e-bd975e2bad2f"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "__SPREADSHEET_ID__",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "calendar",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.id }}",
+            "status": "rejected",
+            "approval_ref": "",
+            "updated_at": "={{ $now.setZone('Asia/Jerusalem').toFormat('yyyy-MM-dd HH:mm') }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "approval_ref",
+              "displayName": "approval_ref",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "name": "Save Rejection",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        3136,
+        352
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "uuI7RITinapm2k9h",
+          "name": "ReynovationSocial"
+        }
+      },
+      "id": "4dd15b6c-1532-4610-a132-5743ed03c5fe"
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $('Verify Claim').first().json.chat_id }}",
+        "messageId": "={{ $('Verify Claim').first().json.message_id }}",
+        "text": "={{ $('Verify Claim').first().json.edit_text }}",
+        "additionalFields": {
+          "disable_web_page_preview": true
+        }
+      },
+      "name": "Edit (Done)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3360,
+        176
+      ],
+      "webhookId": "e085702f-3230-4b0f-a54f-47a8fd7ed8a8",
+      "credentials": {
+        "telegramApi": {
+          "id": "gQQT4wEAXLPFc22J",
+          "name": "ReynovationSocial"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "id": "913e1617-829f-400c-a74f-75d60273c362"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "b913cc17-0ec4-412e-abf1-354190f3fc15",
+              "leftValue": "={{ $json.kind }}",
+              "rightValue": "media",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Is Media?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        896,
+        528
+      ],
+      "id": "2cd8993c-4435-47e3-ae89-fb6db20cf5d9"
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "fileId": "={{ $json.file_id }}",
+        "additionalFields": {}
+      },
+      "name": "Get File",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1120,
+        528
+      ],
+      "webhookId": "93e3a296-a949-4e74-aa12-8712df71862a",
+      "credentials": {
+        "telegramApi": {
+          "id": "gQQT4wEAXLPFc22J",
+          "name": "ReynovationSocial"
+        }
+      },
+      "id": "85ae37c9-bc03-430b-a8be-c217492d48b8"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.cloudinary.com/v1_1/{{ $('Route Update').first().json.cloudinary_cloud }}/auto/upload",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            },
+            {
+              "name": "upload_preset",
+              "value": "={{ $('Route Update').first().json.cloudinary_preset }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Upload to Cloudinary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1344,
+        528
+      ],
+      "id": "13be7a01-2278-4fea-a671-291681ecd986"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "__SPREADSHEET_ID__",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "campaigns",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "name": "Read Campaigns",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1568,
+        528
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "uuI7RITinapm2k9h",
+          "name": "ReynovationSocial"
+        }
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "id": "538161b3-d4b3-40a2-a610-6385ea12eedc"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "__SPREADSHEET_ID__",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "products",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "name": "Read Products",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1792,
+        528
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "uuI7RITinapm2k9h",
+          "name": "ReynovationSocial"
+        }
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "id": "fe838e7a-8343-4739-a899-2d6e95ea5515"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "__SPREADSHEET_ID__",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "brand",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "name": "Read Brand",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2016,
+        528
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "uuI7RITinapm2k9h",
+          "name": "ReynovationSocial"
+        }
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "id": "581e4dfd-5166-4536-a937-c9231b38ff90"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ---- shared helpers (inlined into every code node by scripts/build-n8n.mjs) ----\nconst TZ = 'Asia/Jerusalem';\nconst LOCAL_RE = /^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}$/;\n\n/** Israel wall-clock \"YYYY-MM-DD HH:mm\"; comparable as plain strings. */\nconst toLocal = (date = new Date()) =>\n  new Intl.DateTimeFormat('sv-SE', {\n    timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit',\n    hour: '2-digit', minute: '2-digit', hour12: false,\n  }).format(date).replace(' 24:', ' 00:');\n\nconst addMinutesLocal = (value, minutes) => {\n  const [d, t] = value.split(' ');\n  const [y, m, day] = d.split('-').map(Number);\n  const [hh, mm] = t.split(':').map(Number);\n  return new Date(Date.UTC(y, m - 1, day, hh, mm + minutes)).toISOString().slice(0, 16).replace('T', ' ');\n};\n\n/** key/value rows of the `config` tab → object. */\nconst loadConfig = (nodeName = 'Load Config') => {\n  const cfg = {};\n  for (const it of $(nodeName).all()) {\n    if (it.json.key) cfg[String(it.json.key).trim()] = String(it.json.value ?? '').trim();\n  }\n  return cfg;\n};\n\nconst str = (v) => String(v ?? '').trim();\nconst cleanCaption = (s) => String(s ?? '').replace(/[—–]/g, '-');\nconst mediaList = (s) => str(s).split(/[\\s,]+/).filter(Boolean);\nconst isVideoUrl = (u) => /\\.(mp4|mov|m4v|webm)(\\?|#|$)/i.test(u) || /\\/video\\/upload\\//.test(u);\n\n/** Approved = explicit approval stamp, or a standing \"auto\" approval. */\nconst isApproved = (r) => str(r.approval_mode) === 'auto' || str(r.approved_at) !== '';\n\n/** Small JPEG still of a Cloudinary image/video (Telegram previews, thumbnails). */\nconst cloudinaryStill = (url, width = 1080) => {\n  const m = /^(https:\\/\\/res\\.cloudinary\\.com\\/[^/]+)\\/(image|video)\\/upload\\/(.+)$/.exec(url || '');\n  if (!m) return url || '';\n  if (m[2] === 'video') return `${m[1]}/video/upload/so_1,w_${width},c_limit/${m[3].replace(/\\.[a-z0-9]+(\\?.*)?$/i, '')}.jpg`;\n  return `${m[1]}/image/upload/w_${width},c_limit,q_auto,f_jpg/${m[3]}`;\n};\n\nconst randomRef = () => Math.random().toString(36).slice(2, 8);\n// ---- end shared helpers ----\n// Turns an uploaded Telegram photo/video into a caption request for the app.\n//   \"#campaign-id #product-id free text\"  → AI caption, text is the brief\n//   \"!exact caption\"                      → use the text verbatim, no AI\nconst cfg = loadConfig();\nconst media = $('Route Update').first().json;\nconst upload = $('Upload to Cloudinary').first().json;\nif (!upload.secure_url) throw new Error('Cloudinary did not return secure_url: ' + JSON.stringify(upload).slice(0, 200));\n\nconst rows = (node) => $(node).all().map((i) => i.json);\nconst campaigns = rows('Read Campaigns').filter((c) => str(c.id));\nconst products = rows('Read Products').filter((p) => str(p.id));\nconst brand = {};\nfor (const r of rows('Read Brand')) if (str(r.key)) brand[str(r.key)] = str(r.value);\n\nconst text = media.text;\nconst verbatim = text.startsWith('!');\nconst tags = [...text.matchAll(/#([a-z0-9][a-z0-9_-]{1,39})/gi)].map((m) => m[1].toLowerCase());\nconst campaign = campaigns.find((c) => tags.includes(str(c.id).toLowerCase())) || null;\nconst product = products.find((p) => tags.includes(str(p.id).toLowerCase())) || null;\nconst brief = text.replace(/#[a-z0-9][a-z0-9_-]{1,39}/gi, ' ').replace(/\\s+/g, ' ').trim();\n\nconst pick = (obj, keys) => (obj ? Object.fromEntries(keys.map((k) => [k, str(obj[k])])) : null);\nconst useAi = !verbatim && !!cfg.app_url && !!cfg.app_api_token;\n\nreturn [{\n  json: {\n    use_ai: useAi,\n    app_url: cfg.app_url.replace(/\\/+$/, ''),\n    app_api_token: cfg.app_api_token,\n    media_url: upload.secure_url,\n    is_video: media.is_video,\n    chat_id: media.chat_id,\n    campaign_id: campaign ? str(campaign.id) : '',\n    product_id: product ? str(product.id) : '',\n    fallback_caption: cleanCaption(verbatim ? text.slice(1).trim() : brief),\n    brief,\n    request: {\n      media: [upload.secure_url],\n      post_type: media.is_video ? 'REEL' : 'POST',\n      brief,\n      campaign: pick(campaign, ['id', 'name', 'status', 'start_date', 'end_date', 'goal', 'audience', 'key_message', 'offer', 'cta', 'hashtags', 'link', 'tone', 'notes']),\n      product: pick(product, ['id', 'name', 'status', 'category', 'description', 'benefits', 'price', 'url', 'hashtags', 'notes']),\n      brand,\n      variants: 3,\n    },\n  },\n}];\n"
+      },
+      "name": "Build Caption Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        528
+      ],
+      "id": "20ab1575-abd9-462f-ac2e-84f209fceccc"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "50243ca1-eadf-4226-a469-f9d2d5fb9997",
+              "leftValue": "={{ String($json.use_ai) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Use AI?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2464,
+        528
+      ],
+      "id": "27d49285-c61f-4d4c-a280-b0b014aeb46c"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.app_url }}/api/captions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.app_api_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "name": "Write Caption (AI)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2688,
+        528
+      ],
+      "onError": "continueRegularOutput",
+      "id": "f2de22e2-0046-48aa-a596-e58e0e89576a"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ---- shared helpers (inlined into every code node by scripts/build-n8n.mjs) ----\nconst TZ = 'Asia/Jerusalem';\nconst LOCAL_RE = /^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}$/;\n\n/** Israel wall-clock \"YYYY-MM-DD HH:mm\"; comparable as plain strings. */\nconst toLocal = (date = new Date()) =>\n  new Intl.DateTimeFormat('sv-SE', {\n    timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit',\n    hour: '2-digit', minute: '2-digit', hour12: false,\n  }).format(date).replace(' 24:', ' 00:');\n\nconst addMinutesLocal = (value, minutes) => {\n  const [d, t] = value.split(' ');\n  const [y, m, day] = d.split('-').map(Number);\n  const [hh, mm] = t.split(':').map(Number);\n  return new Date(Date.UTC(y, m - 1, day, hh, mm + minutes)).toISOString().slice(0, 16).replace('T', ' ');\n};\n\n/** key/value rows of the `config` tab → object. */\nconst loadConfig = (nodeName = 'Load Config') => {\n  const cfg = {};\n  for (const it of $(nodeName).all()) {\n    if (it.json.key) cfg[String(it.json.key).trim()] = String(it.json.value ?? '').trim();\n  }\n  return cfg;\n};\n\nconst str = (v) => String(v ?? '').trim();\nconst cleanCaption = (s) => String(s ?? '').replace(/[—–]/g, '-');\nconst mediaList = (s) => str(s).split(/[\\s,]+/).filter(Boolean);\nconst isVideoUrl = (u) => /\\.(mp4|mov|m4v|webm)(\\?|#|$)/i.test(u) || /\\/video\\/upload\\//.test(u);\n\n/** Approved = explicit approval stamp, or a standing \"auto\" approval. */\nconst isApproved = (r) => str(r.approval_mode) === 'auto' || str(r.approved_at) !== '';\n\n/** Small JPEG still of a Cloudinary image/video (Telegram previews, thumbnails). */\nconst cloudinaryStill = (url, width = 1080) => {\n  const m = /^(https:\\/\\/res\\.cloudinary\\.com\\/[^/]+)\\/(image|video)\\/upload\\/(.+)$/.exec(url || '');\n  if (!m) return url || '';\n  if (m[2] === 'video') return `${m[1]}/video/upload/so_1,w_${width},c_limit/${m[3].replace(/\\.[a-z0-9]+(\\?.*)?$/i, '')}.jpg`;\n  return `${m[1]}/image/upload/w_${width},c_limit,q_auto,f_jpg/${m[3]}`;\n};\n\nconst randomRef = () => Math.random().toString(36).slice(2, 8);\n// ---- end shared helpers ----\n// Builds the draft row. Uses the first AI variant when available and falls\n// back to the Telegram text if the AI call was skipped or failed.\nconst req = $('Build Caption Request').first().json;\nconst ai = $json && Array.isArray($json.variants) ? $json : null;\n\nconst compose = (v) => {\n  const tags = [...new Set((v.hashtags || []).map((h) => '#' + String(h).replace(/^#+/, '').trim()).filter((h) => h.length > 1))];\n  const body = cleanCaption(v.caption).trim();\n  return tags.length ? `${body}\\n\\n${tags.slice(0, 30).join(' ')}` : body;\n};\n\nconst variants = ai ? ai.variants.filter((v) => str(v.caption)) : [];\nconst caption = variants.length ? compose(variants[0]) : req.fallback_caption;\nconst now = toLocal();\nconst day = now.slice(0, 10);\n\nconst errorOf = (j) => (j && (typeof j.error === 'string' ? j.error : j.error && j.error.message)) || '';\nconst aiError = req.use_ai && !variants.length ? str(errorOf($json)) || 'no response' : '';\nconst alternatives = variants.slice(1).map((v, i) => `— גרסה ${i + 2} (${str(v.angle)}):\\n${compose(v)}`).join('\\n\\n');\n\nreturn [{\n  json: {\n    id: `${day}-${Math.floor(Math.random() * 36 ** 4).toString(36).padStart(4, '0')}`,\n    type: req.is_video ? 'REEL' : 'POST',\n    media_urls: req.media_url,\n    caption,\n    approval_mode: 'approve',\n    status: 'draft',\n    campaign_id: req.campaign_id,\n    product_id: req.product_id,\n    notes: req.brief ? `בריף מטלגרם: ${req.brief}`.slice(0, 500) : '',\n    created_at: now,\n    updated_at: now,\n    chat_id: req.chat_id,\n    app_url: req.app_url,\n    ai_used: variants.length > 0,\n    ai_error: aiError,\n    alternatives,\n  },\n}];\n"
+      },
+      "name": "Make Draft",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2912,
+        704
+      ],
+      "id": "8c522a3e-4f7a-4efe-ac4e-ba5ed21c8faf"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "__SPREADSHEET_ID__",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "calendar",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.id }}",
+            "type": "={{ $json.type }}",
+            "media_urls": "={{ $json.media_urls }}",
+            "caption": "={{ $json.caption }}",
+            "approval_mode": "approve",
+            "status": "draft",
+            "campaign_id": "={{ $json.campaign_id }}",
+            "product_id": "={{ $json.product_id }}",
+            "notes": "={{ $json.notes }}",
+            "created_at": "={{ $json.created_at }}",
+            "updated_at": "={{ $json.updated_at }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "type",
+              "displayName": "type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "media_urls",
+              "displayName": "media_urls",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "caption",
+              "displayName": "caption",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "approval_mode",
+              "displayName": "approval_mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "campaign_id",
+              "displayName": "campaign_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "product_id",
+              "displayName": "product_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "notes",
+              "displayName": "notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "name": "Append Draft",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        3136,
+        704
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "uuI7RITinapm2k9h",
+          "name": "ReynovationSocial"
+        }
+      },
+      "id": "93562e62-f8b4-4b22-a2a1-36b6a57e588a"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Make Draft').first().json.chat_id }}",
+        "text": "={{ ('📝 נוצרה טיוטה ' + $('Make Draft').first().json.id + '\\n' + ($('Make Draft').first().json.ai_used ? '✨ קפשן מה-AI:' : ($('Make Draft').first().json.ai_error ? '⚠️ ה-AI לא זמין (' + $('Make Draft').first().json.ai_error + ') - שמרתי את הטקסט שלך:' : 'הקפשן:')) + '\\n\\n' + ($('Make Draft').first().json.caption || '(ריק)') + ($('Make Draft').first().json.alternatives ? '\\n\\nגרסאות נוספות:\\n' + $('Make Draft').first().json.alternatives : '') + ($('Make Draft').first().json.app_url ? '\\n\\nלקביעת מועד ואישור: ' + $('Make Draft').first().json.app_url : '')).slice(0, 4000) }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true
+        }
+      },
+      "name": "Confirm Draft",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3360,
+        704
+      ],
+      "webhookId": "c8dfca64-3af9-491a-a848-e24c09992734",
+      "credentials": {
+        "telegramApi": {
+          "id": "gQQT4wEAXLPFc22J",
+          "name": "ReynovationSocial"
+        }
+      },
+      "id": "e4b55766-7a6e-4e84-a57e-bb55568ea5d1"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ 'שלח לי תמונה או וידאו ואכין טיוטה עם קפשן 📝\\n\\n• #מזהה-קמפיין או #מזהה-מוצר בטקסט - ישייך ויכתוב בהתאם\\n• שאר הטקסט = בריף ל-AI\\n• טקסט שמתחיל ב-! נשמר כקפשן כמו שהוא' + ($json.app_url ? '\\n\\nהלוח: ' + $json.app_url : '') }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true
+        }
+      },
+      "name": "Usage Hint",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1120,
+        880
+      ],
+      "webhookId": "dfa9a023-09ef-4d31-a682-85c911294ade",
+      "credentials": {
+        "telegramApi": {
+          "id": "gQQT4wEAXLPFc22J",
+          "name": "ReynovationSocial"
+        }
+      },
+      "id": "07d8160f-f189-48de-a439-b90c13125639"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Config": {
+      "main": [
+        [
+          {
+            "node": "Route Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Update": {
+      "main": [
+        [
+          {
+            "node": "Is Button?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Button?": {
+      "main": [
+        [
+          {
+            "node": "Read Calendar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is Media?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Calendar": {
+      "main": [
+        [
+          {
+            "node": "Decide",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide": {
+      "main": [
+        [
+          {
+            "node": "Answer Button",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer Button": {
+      "main": [
+        [
+          {
+            "node": "Stale?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stale?": {
+      "main": [
+        [
+          {
+            "node": "Edit (Stale)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Claim",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim": {
+      "main": [
+        [
+          {
+            "node": "Re-read Calendar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Re-read Calendar": {
+      "main": [
+        [
+          {
+            "node": "Verify Claim",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Claim": {
+      "main": [
+        [
+          {
+            "node": "Publish Now?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish Now?": {
+      "main": [
+        [
+          {
+            "node": "Publish to Instagram",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Approve Later?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish to Instagram": {
+      "main": [
+        [
+          {
+            "node": "Save Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Result": {
+      "main": [
+        [
+          {
+            "node": "Edit (Published)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approve Later?": {
+      "main": [
+        [
+          {
+            "node": "Save Approval",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Approval": {
+      "main": [
+        [
+          {
+            "node": "Edit (Done)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reject?": {
+      "main": [
+        [
+          {
+            "node": "Save Rejection",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Edit (Done)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Rejection": {
+      "main": [
+        [
+          {
+            "node": "Edit (Done)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Media?": {
+      "main": [
+        [
+          {
+            "node": "Get File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Usage Hint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get File": {
+      "main": [
+        [
+          {
+            "node": "Upload to Cloudinary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to Cloudinary": {
+      "main": [
+        [
+          {
+            "node": "Read Campaigns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Campaigns": {
+      "main": [
+        [
+          {
+            "node": "Read Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Products": {
+      "main": [
+        [
+          {
+            "node": "Read Brand",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Brand": {
+      "main": [
+        [
+          {
+            "node": "Build Caption Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Caption Request": {
+      "main": [
+        [
+          {
+            "node": "Use AI?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use AI?": {
+      "main": [
+        [
+          {
+            "node": "Write Caption (AI)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Make Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Caption (AI)": {
+      "main": [
+        [
+          {
+            "node": "Make Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Make Draft": {
+      "main": [
+        [
+          {
+            "node": "Append Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append Draft": {
+      "main": [
+        [
+          {
+            "node": "Confirm Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Jerusalem",
+    "errorWorkflow": "cPELz1Hlnup9oEir"
+  },
+  "id": "RbzKFcz4zIHRiJJl",
+  "tags": [
+    {
+      "id": "6qksHX28xg9UwYfk",
+      "name": "Social"
+    }
+  ]
+}

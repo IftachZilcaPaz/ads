@@ -1,0 +1,66 @@
+{
+  "name": "BP 5 - Error Alert",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "bdad2413-5f8c-4243-aca0-d7ec6e9a653b"
+    },
+    {
+      "parameters": {
+        "chatId": "__TELEGRAM_CHAT_ID__",
+        "text": "=🚨 workflow נפל: {{ $json.workflow.name }}\n{{ $json.execution?.lastNodeExecuted ? 'בשלב: ' + $json.execution.lastNodeExecuted + '\\n' : '' }}{{ $json.execution?.error?.message || 'unknown error' }}{{ $json.execution?.url ? '\\n' + $json.execution.url : '' }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true
+        }
+      },
+      "name": "Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        224,
+        0
+      ],
+      "webhookId": "841d662e-1a4a-4b93-a9b4-738ff942ea2b",
+      "credentials": {
+        "telegramApi": {
+          "id": "gQQT4wEAXLPFc22J",
+          "name": "ReynovationSocial"
+        }
+      },
+      "id": "47173cef-e481-4e9c-ab5d-6063e0568a2f"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "id": "cPELz1Hlnup9oEir",
+  "tags": [
+    {
+      "id": "6qksHX28xg9UwYfk",
+      "name": "Social"
+    }
+  ]
+}
