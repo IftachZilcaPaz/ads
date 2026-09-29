@@ -1,0 +1,36 @@
+{
+  "name": "bp-social",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Instagram content planner: approvals, scheduling and AI captions on Netlify + Google Sheets + n8n",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm run test && npm run build",
+    "n8n:build": "node scripts/build-n8n.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/IftachZilcaPaz/ads.git"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.129.0",
+    "preact": "^10.29.8",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@netlify/edge-functions": "^4.0.0",
+    "@netlify/functions": "^6.0.0",
+    "@preact/preset-vite": "^2.10.6",
+    "@types/node": "^26.6.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.2"
+  }
+}
