@@ -73,6 +73,10 @@ beforeEach(async () => {
 describe('telegram conversation', () => {
   it('asks campaign → product → brief, then writes, picks, schedules and approves', async () => {
     expect(await send({ kind: 'media', media_url: IMG, text: '' })).toEqual({});
+    expect(tg.last().text).toBe('📐 פוסט או סטורי?');
+    expect(tg.last().keyboard!.flat().map((b) => b.text)).toEqual(['🖼 פוסט בפיד', '📱 סטורי']);
+    await press('🖼 פוסט בפיד');
+    expect(tg.edits.at(-1)!.text).toBe('🖼 פוסט בפיד');
     expect(tg.last().text).toContain('לאיזה קמפיין');
     // Only active campaigns are offered.
     expect(tg.last().keyboard!.flat().map((b) => b.text)).toEqual(['חורף', 'בלי קמפיין']);
@@ -108,7 +112,7 @@ describe('telegram conversation', () => {
     await press('היום 19:00');
     const confirm = tg.last();
     expect(confirm.photo).toContain('/image/upload/w_720,c_limit');
-    expect(confirm.text).toContain('🗓 היום ב-19:00');
+    expect(confirm.text).toContain('🖼 פוסט בפיד · 🗓 היום ב-19:00');
     expect(confirm.text).toContain('📣 חורף · 🏷 מטבח');
 
     await press('✅ אשר ותזמן');
@@ -122,15 +126,18 @@ describe('telegram conversation', () => {
   it('skips questions answered by #tags and uses !text verbatim', async () => {
     await send({ kind: 'media', media_url: IMG, text: '#winter #kitchen' });
     expect(tg.sent[0]!.text).toBe('📥 קיבלתי (📣 חורף · 🏷 מטבח). כמה שאלות קצרות:');
+    await press('🖼 פוסט בפיד');
     expect(tg.last().text).toContain('מה חשוב להגיד');
 
     tg.sent.length = 0;
     await send({ kind: 'media', media_url: IMG, text: '!הקפשן שלי בדיוק' });
+    await press('🖼 פוסט בפיד');
     expect(tg.last().text).toBe('🗓 מתי לפרסם?');
   });
 
   it('handles "now", free-text times, and invalid times', async () => {
     await send({ kind: 'media', media_url: IMG, text: '!קפשן' });
+    await press('🖼 פוסט בפיד');
     await press('🕐 מועד אחר');
     await send({ kind: 'text', text: '08:00' });
     expect(tg.last().text).toContain('כבר עברה היום');
@@ -144,7 +151,8 @@ describe('telegram conversation', () => {
   });
 
   it('can save as a draft, retry the AI, or take a typed caption', async () => {
-    const first = await send({ kind: 'media', media_url: IMG, text: '#winter #kitchen שיפוץ' });
+    await send({ kind: 'media', media_url: IMG, text: '#winter #kitchen שיפוץ' });
+    const first = await press('🖼 פוסט בפיד');
     await send({ kind: 'variants', nonce: first.generate!.nonce, error: 'overloaded' });
     expect(tg.last().text).toContain('overloaded');
 
@@ -162,12 +170,13 @@ describe('telegram conversation', () => {
 
   it('ignores stale buttons, double taps, late AI results and strangers', async () => {
     const first = await send({ kind: 'media', media_url: IMG, text: '!א' });
-    const oldWhen = tg.last();
+    const oldQuestion = tg.last();
     await send({ kind: 'media', media_url: IMG, text: '!ב' }); // new conversation
 
-    await send({ kind: 'button', data: oldWhen.keyboard![1]![0]!.data, message_id: oldWhen.id, query_id: 'q' });
+    await send({ kind: 'button', data: oldQuestion.keyboard![0]![0]!.data, message_id: oldQuestion.id, query_id: 'q' });
     expect(tg.answers.at(-1)).toBe('השיחה הזו כבר הסתיימה');
 
+    await press('🖼 פוסט בפיד');
     await press('📤 עכשיו');
     const before = tg.sent.length;
     await press('📤 עכשיו'); // same message tapped again
@@ -177,6 +186,23 @@ describe('telegram conversation', () => {
 
     await bot.handle({ kind: 'text', chat_id: '999', text: 'hi' });
     expect(tg.sent.length).toBe(before);
+  });
+
+  it('schedules a story without caption questions', async () => {
+    await send({ kind: 'media', media_url: IMG, text: '' });
+    await press('📱 סטורי');
+    expect(tg.last().text).toBe('🗓 מתי לפרסם?');
+    await press('מחר 09:00');
+    const confirm = tg.last();
+    expect(confirm.text).toBe('📱 סטורי · 🗓 מחר ב-09:00');
+    expect(confirm.keyboard!.flat().map((b) => b.text)).not.toContain('✍️ שנה קפשן');
+    await press('✅ אשר ותזמן');
+    expect(await onlyPost()).toMatchObject({ type: 'STORY', status: 'ready', publish_at: '2026-10-02 09:00', caption: '' });
+  });
+
+  it('offers reel or story for a video', async () => {
+    await send({ kind: 'media', media_url: 'https://res.cloudinary.com/demo/video/upload/v1/a.mp4', is_video: true, text: '' });
+    expect(tg.last().keyboard!.flat().map((b) => b.text)).toEqual(['🎬 ריל', '📱 סטורי']);
   });
 
   it('explains itself and can be cancelled', async () => {

@@ -42,11 +42,13 @@ export interface BotReply {
   generate?: { nonce: string; request: CaptionRequest };
 }
 
-type Step = 'campaign' | 'product' | 'brief' | 'writing' | 'pick' | 'own_caption' | 'when' | 'when_text' | 'confirm' | 'busy';
+type Step = 'format' | 'campaign' | 'product' | 'brief' | 'writing' | 'pick' | 'own_caption' | 'when' | 'when_text' | 'confirm' | 'busy';
 
 interface SessionData {
   brief: string;
-  asked: { campaign?: boolean; product?: boolean; brief?: boolean };
+  asked: { format?: boolean; campaign?: boolean; product?: boolean; brief?: boolean };
+  /** The caption was given with "!" - no AI questions. */
+  verbatim?: boolean;
   campaigns: { id: string; name: string }[];
   products: { id: string; name: string }[];
   variants: { angle: string; caption: string }[];
@@ -68,7 +70,7 @@ const TEXT_STEPS: readonly Step[] = ['brief', 'own_caption', 'when_text'];
 const CANCEL = /^(\/cancel|ביטול|בטל|עצור|stop)$/i;
 const HELP = [
   'שלח לי תמונה או וידאו, ואשאל כמה שאלות קצרות:',
-  '📣 קמפיין · 🏷 מוצר · ✍️ מה חשוב להגיד',
+  '📐 פוסט או סטורי · 📣 קמפיין · 🏷 מוצר · ✍️ מה חשוב להגיד',
   'אחר כך אכתוב 3 גרסאות, תבחר אחת ותקבע מתי זה עולה.',
   '',
   'קיצורים בטקסט של התמונה:',
@@ -83,6 +85,9 @@ const btn = (nonce: string, label: string, ...parts: (string | number)[]) => ({ 
 const rows = <T>(items: T[], size: number): T[][] => Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, i * size + size));
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 const DIGITS = ['1️⃣', '2️⃣', '3️⃣', '4️⃣'];
+const FORMATS = ['POST', 'REEL', 'STORY'] as const;
+type Format = (typeof FORMATS)[number];
+const FORMAT_LABEL: Record<Format, string> = { POST: '🖼 פוסט בפיד', REEL: '🎬 ריל', STORY: '📱 סטורי' };
 
 export interface BotDeps {
   db: Db;
@@ -149,10 +154,11 @@ export class Bot {
       chat_id: ctx.chat,
       nonce: this.nonce(),
       post_id: post.id,
-      step: 'campaign',
+      step: 'format',
       data: {
         brief,
         asked: { campaign: !!campaign, product: !!product, brief: !!brief },
+        verbatim,
         campaigns: campaigns.map((c) => ({ id: c.id, name: c.name })).slice(0, 12),
         products: products.map((p) => ({ id: p.id, name: p.name })).slice(0, 12),
         variants: [],
@@ -168,8 +174,8 @@ export class Bot {
     );
 
     const tagged = [campaign && `📣 ${campaign.name}`, product && `🏷 ${product.name}`].filter(Boolean).join(' · ');
-    await ctx.tg.send(ctx.chat, `📥 קיבלתי${tagged ? ` (${tagged})` : ''}.${verbatim ? '' : ' כמה שאלות קצרות:'}`);
-    return verbatim ? this.askWhen(ctx, session) : this.next(ctx, session, post);
+    await ctx.tg.send(ctx.chat, `📥 קיבלתי${tagged ? ` (${tagged})` : ''}. כמה שאלות קצרות:`);
+    return this.next(ctx, session, post);
   }
 
   private async onText(ctx: Ctx, text: string): Promise<BotReply> {
@@ -218,6 +224,14 @@ export class Bot {
     const d = session.data;
 
     switch (verb) {
+      case 'fmt': {
+        if (!(FORMATS as readonly string[]).includes(arg)) return {};
+        const next = await this.advance(session, 'format');
+        if (!next) return {};
+        const post = await this.deps.store.editPost(session.post_id, { type: arg });
+        await ctx.tg.edit(ctx.chat, messageId, FORMAT_LABEL[arg as Format]);
+        return this.next(ctx, next, post);
+      }
       case 'camp': {
         const picked = d.campaigns[Number(arg)];
         const next = await this.advance(session, 'campaign');
@@ -366,6 +380,14 @@ export class Bot {
   private async next(ctx: Ctx, session: Session, post?: Post): Promise<BotReply> {
     const d = session.data;
     const current = post ?? (await this.post(session.post_id));
+    if (!d.asked.format) {
+      const next = await this.move(session, 'format', { asked: { ...d.asked, format: true } });
+      const feed = current.type === 'REEL' ? btn(next.nonce, '🎬 ריל', 'fmt', 'REEL') : btn(next.nonce, '🖼 פוסט בפיד', 'fmt', 'POST');
+      await this.ask(ctx, next, '📐 פוסט או סטורי?', [[feed, btn(next.nonce, '📱 סטורי', 'fmt', 'STORY')]]);
+      return {};
+    }
+    // A story has no caption on Instagram, and "!" already gave one: straight to timing.
+    if (current.type === 'STORY' || d.verbatim) return this.askWhen(ctx, session);
     if (!d.asked.campaign && d.campaigns.length && !current.campaign_id) {
       const next = await this.move(session, 'campaign', { asked: { ...d.asked, campaign: true } });
       await this.ask(ctx, next, '📣 לאיזה קמפיין זה שייך?', [
@@ -448,17 +470,19 @@ export class Bot {
     const campaign = snap.campaigns.find((c) => c.id === post.campaign_id);
     const product = snap.products.find((p) => p.id === post.product_id);
     const when = session.data.publish_at <= toLocal(this.now()) ? 'עכשיו' : humanWhen(session.data.publish_at, this.now());
+    const story = post.type === 'STORY';
     const summary = [
-      `🗓 ${when}`,
+      `${FORMAT_LABEL[post.type as Format] ?? post.type} · 🗓 ${when}`,
       [campaign && `📣 ${campaign.name}`, product && `🏷 ${product.name}`].filter(Boolean).join(' · '),
       '',
-      clip(post.caption, 700),
+      story ? '' : clip(post.caption, 700),
     ]
       .filter((line, i) => line || i === 2)
-      .join('\n');
+      .join('\n')
+      .trim();
     const keyboard: Keyboard = [
       [btn(session.nonce, '✅ אשר ותזמן', 'ok', 'approve')],
-      [btn(session.nonce, '🕐 שנה מועד', 'ok', 'when'), btn(session.nonce, '✍️ שנה קפשן', 'ok', 'caption')],
+      [btn(session.nonce, '🕐 שנה מועד', 'ok', 'when'), ...(story ? [] : [btn(session.nonce, '✍️ שנה קפשן', 'ok', 'caption')])],
       [btn(session.nonce, '📥 השאר כטיוטה', 'ok', 'draft')],
     ];
     const next = await this.move(session, 'confirm');
