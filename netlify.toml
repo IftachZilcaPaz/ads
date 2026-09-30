@@ -5,6 +5,13 @@
 [build.environment]
   NODE_VERSION = "22"
 
+# `netlify dev`: serves on 8888 and proxies the Vite dev server on 5173.
+[dev]
+  framework = "#custom"
+  command = "npm run dev"
+  targetPort = 5173
+  port = 8888
+
 [functions]
   node_bundler = "esbuild"
 
