@@ -160,6 +160,27 @@ describe('publish to instagram', () => {
     expect(out).toMatchObject({ status: 'failed', error: 'Meta 9004: Media download failed' });
   });
 
+  it('sends images in a shape Instagram accepts', async () => {
+    const sent: string[] = [];
+    const http = ({ url, qs }: { url: string; qs: Json }) => {
+      if (url.endsWith('/IG/media')) {
+        sent.push(String(qs.image_url));
+        return { id: 'C1' };
+      }
+      if (url.endsWith('/C1')) return { status_code: 'FINISHED' };
+      if (url.endsWith('/media_publish')) return { id: 'M1' };
+      return {};
+    };
+    await run('publish-instagram.js', { json: { ...base, media_urls: 'https://res.cloudinary.com/demo/image/upload/v17/folder/tall.PNG' }, http });
+    await run('publish-instagram.js', { json: { ...base, type: 'STORY' }, http });
+    await run('publish-instagram.js', { json: { ...base, media_urls: 'https://cdn.example/x.jpg' }, http });
+    expect(sent).toEqual([
+      'https://res.cloudinary.com/demo/image/upload/if_ar_lt_0.8/c_pad,ar_4:5,b_auto/if_end/if_ar_gt_1.91/c_pad,ar_1.91,b_auto/if_end/c_limit,w_1440/q_auto:good/v17/folder/tall.jpg',
+      'https://res.cloudinary.com/demo/image/upload/c_limit,w_1440/q_auto:good/v1/a.jpg',
+      'https://cdn.example/x.jpg',
+    ]);
+  });
+
   it('does not post twice', async () => {
     const [out] = await run('publish-instagram.js', { json: { ...base, ig_media_id: 'M0' }, http: () => { throw new Error('no calls'); } });
     expect(out).toMatchObject({ status: 'published', ig_media_id: 'M0' });

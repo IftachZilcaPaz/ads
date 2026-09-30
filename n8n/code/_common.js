@@ -41,5 +41,15 @@ const cloudinaryStill = (url, width = 1080) => {
   return `${m[1]}/image/upload/w_${width},c_limit,q_auto,f_jpg/${m[3]}`;
 };
 
+// Instagram takes only JPEG, and feed images only between 4:5 and 1.91:1.
+// Cloudinary pads outliers (never crops) and converts, at delivery time.
+const IG_FEED_FIT = 'if_ar_lt_0.8/c_pad,ar_4:5,b_auto/if_end/if_ar_gt_1.91/c_pad,ar_1.91,b_auto/if_end/';
+const igImage = (url, { feed = true } = {}) => {
+  const m = /^(https:\/\/res\.cloudinary\.com\/[^/]+)\/image\/upload\/(.+)$/.exec(url || '');
+  if (!m) return url || '';
+  const path = m[2].replace(/\.[a-z0-9]+(\?.*)?$/i, '');
+  return `${m[1]}/image/upload/${feed ? IG_FEED_FIT : ''}c_limit,w_1440/q_auto:good/${path}.jpg`;
+};
+
 const randomRef = () => Math.random().toString(36).slice(2, 8);
 // ---- end shared helpers ----

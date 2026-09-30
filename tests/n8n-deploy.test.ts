@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createClient, deployWorkflows, restoreWorkflow, toPayload } from '../n8n/src/deploy.mjs';
-import { localValues, localize } from '../n8n/src/local.mjs';
+import { localValues, localize, withPublishInterval } from '../n8n/src/local.mjs';
 import { WORKFLOWS } from '../n8n/src/workflows.mjs';
 
 type Wf = Record<string, any>;
@@ -99,6 +99,14 @@ describe('n8n deploy', () => {
 
     const badKey = createClient({ baseUrl: 'https://n8n.example', apiKey: 'wrong', fetchImpl: (async () => new Response('{"message":"unauthorized"}', { status: 401 })) as unknown as typeof fetch });
     await expect(deployWorkflows({ workflows, api: badKey })).rejects.toThrow(/401.*N8N_API_KEY/);
+  });
+
+  it('overrides the publisher cadence for testing without touching the source', () => {
+    const interval = (wfs: Record<string, Wf>) => wfs['bp1-publisher']!.nodes.find((n: Wf) => n.type === 'n8n-nodes-base.scheduleTrigger').parameters.rule.interval[0].minutesInterval;
+    expect(interval(withPublishInterval(workflows, '2'))).toBe(2);
+    expect(interval(workflows)).toBe(15);
+    expect(withPublishInterval(workflows, undefined)).toBe(workflows);
+    expect(() => withPublishInterval(workflows, '0')).toThrow(/1-59/);
   });
 
   it('restores a backup', async () => {

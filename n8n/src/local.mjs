@@ -3,6 +3,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { OWNER_CHAT, PG_CREDENTIAL } from './nodes.mjs';
+import { PUBLISH_TRIGGER } from './workflows.mjs';
 
 export function loadEnv(root) {
   const file = join(root, '.env');
@@ -29,4 +30,19 @@ export function localize(workflow, values) {
   let json = JSON.stringify(workflow);
   for (const [k, v] of Object.entries(values)) json = json.replaceAll(k, JSON.stringify(String(v)).slice(1, -1));
   return JSON.parse(json);
+}
+
+/**
+ * N8N_PUBLISH_EVERY_MINUTES (1-59) overrides the Publisher's 15-minute cadence,
+ * e.g. 2 while testing. Unset it and deploy again to go back to 15.
+ */
+export function withPublishInterval(workflows, raw) {
+  if (raw === undefined || raw === '') return workflows;
+  const minutes = Number(raw);
+  if (!Number.isInteger(minutes) || minutes < 1 || minutes > 59) {
+    throw new Error(`N8N_PUBLISH_EVERY_MINUTES must be a whole number 1-59, got "${raw}"`);
+  }
+  const publisher = structuredClone(workflows['bp1-publisher']);
+  publisher.nodes.find((n) => n.name === PUBLISH_TRIGGER).parameters.rule.interval[0].minutesInterval = minutes;
+  return { ...workflows, 'bp1-publisher': publisher };
 }

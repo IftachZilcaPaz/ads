@@ -7,6 +7,7 @@
  *   npm run n8n:deploy -- --only bp1-publisher,bp3-watchdog
  *   npm run n8n:deploy -- --no-activate     update but leave activation to you
  *   npm run n8n:deploy -- --restore n8n/backups/<file>.json
+ *   N8N_PUBLISH_EVERY_MINUTES=2 npm run n8n:deploy -- --only bp1-publisher   faster cadence for testing
  *
  * Needs in .env (or the environment): N8N_URL, N8N_API_KEY, N8N_POSTGRES_CREDENTIAL_ID,
  * TELEGRAM_CHAT_ID. Every workflow that gets replaced is first saved to
@@ -16,7 +17,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient, deployWorkflows, restoreWorkflow } from '../n8n/src/deploy.mjs';
-import { loadEnv, localValues, localize } from '../n8n/src/local.mjs';
+import { loadEnv, localValues, localize, withPublishInterval } from '../n8n/src/local.mjs';
 import { WORKFLOWS } from '../n8n/src/workflows.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -49,7 +50,11 @@ try {
 
   const { values, missing } = localValues(env);
   if (missing.length) fail(`Missing ${missing.join(', ')} in .env`);
-  const workflows = Object.fromEntries(Object.entries(WORKFLOWS).map(([k, wf]) => [k, localize(wf, values)]));
+  const workflows = withPublishInterval(
+    Object.fromEntries(Object.entries(WORKFLOWS).map(([k, wf]) => [k, localize(wf, values)])),
+    env.N8N_PUBLISH_EVERY_MINUTES,
+  );
+  if (env.N8N_PUBLISH_EVERY_MINUTES) console.log(`Publisher runs every ${env.N8N_PUBLISH_EVERY_MINUTES} min (N8N_PUBLISH_EVERY_MINUTES)`);
 
   const backupDir = join(root, 'n8n', 'backups');
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);

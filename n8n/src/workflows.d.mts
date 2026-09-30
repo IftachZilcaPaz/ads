@@ -12,3 +12,4 @@ export interface N8nWorkflow {
   settings: Record<string, unknown>;
 }
 export const WORKFLOWS: Record<string, N8nWorkflow>;
+export const PUBLISH_TRIGGER: string;

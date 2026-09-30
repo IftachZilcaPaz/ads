@@ -24,6 +24,7 @@ const approveButtons = (src) => [
 ];
 
 const LOAD_CONFIG = 'select key, value from settings';
+export const PUBLISH_TRIGGER = 'Every N min';
 const SAVE_RESULT_SQL = 'select id, status from finish_publish($1, $2, $3, $4, $5)';
 const SAVE_RESULT_PARAMS = "={{ [$json.id, $json.status, $json.ig_media_id || '', $json.permalink || '', $json.error || ''] }}";
 
@@ -37,7 +38,7 @@ const publisher = workflow({
   id: 'EMES0elQDjPxhY6Z',
   timezone: TZ,
   nodes: [
-    schedule('Every 15 min', [0, 1], { field: 'minutes', minutesInterval: 15 }),
+    schedule(PUBLISH_TRIGGER, [0, 1], { field: 'minutes', minutesInterval: 15 }),
     pg('Load Config', [1, 1], LOAD_CONFIG),
 
     pg('Claim Due Posts', [2, 0], 'select * from claim_due_posts($1)', { params: "={{ ['claim:' + $execution.id] }}" }),
@@ -70,7 +71,7 @@ const publisher = workflow({
     ),
   ],
   links: [
-    ['Every 15 min', 'Load Config'],
+    [PUBLISH_TRIGGER, 'Load Config'],
     ['Load Config', 'Claim Due Posts'],
     ['Load Config', 'Request Approvals'],
     ['Claim Due Posts', 'Prepare Publish'],

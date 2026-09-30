@@ -55,7 +55,7 @@ try {
     for (const u of urls) {
       const qs = isVideoUrl(u)
         ? { media_type: 'VIDEO', video_url: u, is_carousel_item: true }
-        : { image_url: u, is_carousel_item: true };
+        : { image_url: igImage(u), is_carousel_item: true };
       const c = await api('POST', `${igId}/media`, qs);
       if (isVideoUrl(u)) await waitReady(c.id, 10000, 40);
       children.push(c.id);
@@ -69,12 +69,12 @@ try {
   } else if (type === 'STORY') {
     const qs = isVideoUrl(urls[0])
       ? { media_type: 'STORIES', video_url: urls[0] }
-      : { media_type: 'STORIES', image_url: urls[0] };
+      : { media_type: 'STORIES', image_url: igImage(urls[0], { feed: false }) };
     const c = await api('POST', `${igId}/media`, qs);
     creationId = c.id;
     if (isVideoUrl(urls[0])) await waitReady(creationId, 15000, 40);
   } else {
-    const c = await api('POST', `${igId}/media`, { image_url: urls[0], caption });
+    const c = await api('POST', `${igId}/media`, { image_url: igImage(urls[0]), caption });
     creationId = c.id;
   }
 
