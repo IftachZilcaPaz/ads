@@ -3,8 +3,8 @@ import { defineConfig, type Plugin } from 'vite';
 import preact from '@preact/preset-vite';
 import { createDevBackend } from './src/server/dev-backend.ts';
 
-/** Fixed dev port (never 3000; 5173 is often taken by other Vite projects). */
-const DEV_PORT = 5199;
+/** Dev port: 5199 by default (never 3000); override with `PORT=xxxx npm run dev`. */
+const DEV_PORT = Number(process.env.PORT) || 5199;
 
 /**
  * Serves /api/* from an in-memory backend inside the Vite dev server, so the
