@@ -61,7 +61,12 @@ npm run db:set                  # רשימת המפתחות (ערכים סודי
    - אם n8n רץ על Railway באותו פרויקט: Host `postgres.railway.internal`, Port `5432`. החיבור אז ברשת הפנימית.
    - לשמור. המזהה הוא החלק האחרון בכתובת של ה-credential: `.../credentials/<ID>`.
 2. ב-`.env` למלא: `N8N_POSTGRES_CREDENTIAL_ID`, `TELEGRAM_CHAT_ID`, `N8N_URL`, `N8N_API_KEY` (מ-**Settings → n8n API**).
-3. לפרוס:
+3. לנקות פוסטים שהמועד שלהם עבר. אחרי הפריסה, פוסט מאושר שהמועד שלו עבר יעלה מיד:
+   ```bash
+   npm run db:overdue                # רשימה בלבד, לא משנה כלום
+   npm run db:overdue -- --draft     # מחזיר את כולם לטיוטות (או --archive לארכיון)
+   ```
+4. לפרוס:
    ```bash
    npm run n8n:deploy -- --dry-run   # בודק חיבור ומראה מה יתעדכן
    npm run n8n:deploy                # מעדכן את כל ה-5 ומפעיל

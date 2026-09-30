@@ -1,4 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { overduePosts } from '../src/server/maintenance.ts';
 import { Store } from '../src/server/store.ts';
 import { insertRows, testDb } from './helpers/db.ts';
 
@@ -127,5 +128,23 @@ describe('app ↔ n8n interplay', () => {
     // A post in "publishing" cannot be touched from the app.
     await ctx.db.query('select * from claim_due_posts($1)', ['claim:9']);
     await expect(new Store(ctx.db).actOnPost('p', 'unapprove')).rejects.toThrow(/בתהליך פרסום/);
+  });
+});
+
+describe('overdue maintenance', () => {
+  it('lists unpublished posts whose time has passed and can move them to drafts', async () => {
+    await post('old-approved', { publish_at: await now(-600), approved_at: 'x' });
+    await post('old-waiting', { publish_at: await now(-60), status: 'pending_approval', approval_ref: 'r' });
+    await post('future', { publish_at: await now(60) });
+    await post('old-draft', { publish_at: await now(-60), status: 'draft' });
+
+    const overdue = await overduePosts(ctx.db);
+    expect(overdue.map((p) => [p.id, p.approved])).toEqual([
+      ['old-approved', true],
+      ['old-waiting', false],
+    ]);
+    const res = await new Store(ctx.db).bulkAct(overdue.map((p) => p.id), 'draft');
+    expect(res.updated.every((p) => p.status === 'draft' && p.approved_at === '' && p.approval_ref === '')).toBe(true);
+    expect(await overduePosts(ctx.db)).toEqual([]);
   });
 });
