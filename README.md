@@ -66,8 +66,7 @@ Claude מקבל: את התמונה, את **קול המותג** (לשונית "מ
 
 ```bash
 npm install
-npm run dev:api   # API מקומי עם נתוני דוגמה בזיכרון (סיסמה: dev), בלי Google
-npm run dev       # האפליקציה ב-http://localhost:5173 (פורטים קבועים: 5173 ו-8888, לא 3000)
+npm run dev       # הכול בפקודה אחת: http://localhost:5199 (סיסמה: dev), נתוני דוגמה בזיכרון, בלי Google
 npm run check     # typecheck + טסטים + build
 npm run n8n:build # מייצר את ה-workflows מ-n8n/src
 ```

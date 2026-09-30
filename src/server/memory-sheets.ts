@@ -2,7 +2,7 @@ import type { CellUpdate, SheetsPort } from './sheets.ts';
 
 /**
  * In-memory stand-in for SheetsClient (same surface Store uses). Powers unit
- * tests and `npm run dev:api`, so the app can run without Google access.
+ * tests and the local dev server (`npm run dev`), so the app can run without Google access.
  */
 export class MemorySheets implements SheetsPort {
   readonly tabs = new Map<string, string[][]>();
