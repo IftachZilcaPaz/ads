@@ -4,7 +4,7 @@ import { Toasts } from './components/Toasts.tsx';
 import { useLocation, type Route } from './router.ts';
 import { AppProvider, useApp } from './state.tsx';
 import { Icon, type IconName } from './icons.tsx';
-import { cx } from './ui.ts';
+import { cx, greeting } from './ui.ts';
 import { Board } from './views/Board.tsx';
 import { BrandView } from './views/BrandView.tsx';
 import { Calendar } from './views/Calendar.tsx';
@@ -47,51 +47,62 @@ function Shell({ onLogout }: { onLogout: () => void }) {
   const { route, query } = useLocation();
   const { data, loadError, reload } = useApp();
 
+  const logout = async () => {
+    await api.logout().catch(() => undefined);
+    onLogout();
+  };
+
   return (
-    <>
-      <header class="topbar">
-        <a class="brand" href="#/board" aria-label="BP Social">
-          <span class="brand-mark">
-            <Icon name="camera" size={18} />
+    <div class="shell">
+      <aside class="sidebar">
+        <a class="side-brand" href="#/board">
+          <span class="avatar">
+            <Icon name="camera" size={30} />
           </span>
-          <span class="brand-text">
-            <strong>BP Social</strong>
-            <small>לוח פרסום לאינסטגרם</small>
-          </span>
+          <strong>{greeting()}!</strong>
+          <small>BP Social</small>
         </a>
-        <nav>
+        <nav class="side-nav">
           {NAV.map((n) => (
             <a key={n.route} href={`#/${n.route}`} class={cx(route === n.route && 'active')} aria-current={route === n.route ? 'page' : undefined}>
-              <Icon name={n.icon} size={16} />
+              <Icon name={n.icon} size={20} />
               <span>{n.label}</span>
             </a>
           ))}
         </nav>
-        <div class="topbar-actions">
+        <div class="side-promo">
+          <span class="promo-icon">
+            <Icon name="sparkles" size={26} />
+          </span>
+          <strong>עוזר הקפשנים</strong>
+          <p>תמונה ← קפשן בקול של המותג</p>
+          <a class="btn-3d" href="#/studio">
+            פוסט חדש
+          </a>
+        </div>
+        <div class="side-tools">
           <button type="button" class="icon round" title="רענון" aria-label="רענון" onClick={() => void reload()}>
             <Icon name="refresh" size={16} />
           </button>
-          <button
-            type="button"
-            class="icon round"
-            title="יציאה"
-            aria-label="יציאה"
-            onClick={async () => {
-              await api.logout().catch(() => undefined);
-              onLogout();
-            }}
-          >
+          <button type="button" class="icon round" title="יציאה" aria-label="יציאה" onClick={() => void logout()}>
             <Icon name="logout" size={16} />
           </button>
-          <a class="cta" href="#/studio" aria-label="פוסט חדש">
-            <span>פוסט חדש</span>
-            <span class="cta-arrow">
-              <Icon name="arrow" size={14} class="ico ico-arrow" />
-              <Icon name="plus" size={16} class="ico ico-plus" />
-            </span>
-          </a>
         </div>
+      </aside>
+
+      <header class="mobile-top">
+        <span class="avatar small">
+          <Icon name="camera" size={18} />
+        </span>
+        <strong>BP Social</strong>
+        <button type="button" class="icon round" aria-label="רענון" onClick={() => void reload()}>
+          <Icon name="refresh" size={16} />
+        </button>
+        <button type="button" class="icon round" aria-label="יציאה" onClick={() => void logout()}>
+          <Icon name="logout" size={16} />
+        </button>
       </header>
+
       <main class={cx('page', `page-${route}`)}>
         {loadError && (
           <p class="notice error">
@@ -108,6 +119,6 @@ function Shell({ onLogout }: { onLogout: () => void }) {
         {data && route === 'library' && <Library />}
         {data && route === 'brand' && <BrandView />}
       </main>
-    </>
+    </div>
   );
 }

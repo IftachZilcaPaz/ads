@@ -8,7 +8,7 @@ import { PostEditor } from '../components/PostEditor.tsx';
 import { usePostActions, usePostFilter } from '../hooks.ts';
 import { Icon } from '../icons.tsx';
 import { useApp } from '../state.tsx';
-import { BUCKET_META, formatWhen, pluralPosts } from '../ui.ts';
+import { BUCKET_META, cx, formatWhen, greeting, pluralPosts } from '../ui.ts';
 
 const DROP_TARGETS: Bucket[] = ['draft', 'awaiting', 'approved'];
 /** Published history can be long; the board shows the most recent ones. */
@@ -63,44 +63,66 @@ export function Board() {
 
   return (
     <>
-      <header class="page-head">
-        <span class="eyebrow">לוח הפרסום</span>
-        <h1>
-          מה עולה <em>ומתי</em>
-        </h1>
-      </header>
+      <section class="hero">
+        <div class="hero-text">
+          <span class="eyebrow">{greeting()}</span>
+          <h1>
+            {summary.awaiting
+              ? `${pluralPosts(summary.awaiting)} ${summary.awaiting === 1 ? 'מחכה' : 'מחכים'} לאישור שלך`
+              : 'הכול מאושר ומתוזמן'}
+          </h1>
+          <p>{summary.next ? `הבא בתור: ${formatWhen(summary.next.publish_at)}` : 'אין כרגע פוסט מאושר בתור.'}</p>
+          <a class="btn-3d" href="#/studio">
+            <Icon name="plus" size={16} />
+            פוסט חדש
+          </a>
+        </div>
+        <div class="hero-art" aria-hidden="true">
+          <span class="blob main">
+            <Icon name="camera" size={56} />
+          </span>
+          <span class="blob spark">
+            <Icon name="sparkles" size={26} />
+          </span>
+          <span class="blob send">
+            <Icon name="send" size={22} />
+          </span>
+        </div>
+      </section>
 
       <section class="summary">
-        <div class="stat">
-          <span class="tile amber">
-            <Icon name="clock" />
+        <div class="stat teal">
+          <span class="tile">
+            <Icon name="clock" size={22} />
           </span>
+          <span class="stat-label">ממתינים לאישור</span>
           <strong>{summary.awaiting}</strong>
-          <span>ממתינים לאישור שלך</span>
+          <span class="stat-sub">בלוח או בטלגרם</span>
         </div>
-        <div class="stat">
-          <span class="tile blue">
-            <Icon name="check" />
+        <div class="stat slate">
+          <span class="tile">
+            <Icon name="check" size={22} />
           </span>
+          <span class="stat-label">מאושרים לשבוע</span>
           <strong>{summary.approvedWeek}</strong>
-          <span>מאושרים ל-7 ימים</span>
+          <span class="stat-sub">יעלו אוטומטית</span>
         </div>
-        <div class="stat wide">
-          <span class="tile violet">
-            <Icon name="send" />
+        <div class="stat ice">
+          <span class="tile">
+            <Icon name="send" size={22} />
           </span>
-          <strong>{summary.next ? formatWhen(summary.next.publish_at) : '—'}</strong>
-          <span>{summary.next ? 'הפוסט המאושר הבא' : 'אין פוסט מאושר בתור'}</span>
+          <span class="stat-label">הבא בתור</span>
+          <strong class="stat-when">{summary.next ? formatWhen(summary.next.publish_at) : '—'}</strong>
+          <span class="stat-sub">{summary.next ? 'מאושר' : 'אין פוסט מאושר'}</span>
         </div>
-        {summary.problems > 0 && (
-          <div class="stat bad">
-            <span class="tile rose">
-              <Icon name="alert" />
-            </span>
-            <strong>{summary.problems}</strong>
-            <span>דורשים טיפול</span>
-          </div>
-        )}
+        <div class={cx('stat', summary.problems ? 'violet bad' : 'violet')}>
+          <span class="tile">
+            <Icon name="alert" size={22} />
+          </span>
+          <span class="stat-label">דורשים טיפול</span>
+          <strong>{summary.problems}</strong>
+          <span class="stat-sub">{summary.problems ? 'נכשלו או נדחו' : 'הכול תקין'}</span>
+        </div>
       </section>
 
       <FilterBar filter={filter} onChange={setFilter} />

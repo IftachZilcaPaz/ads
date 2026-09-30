@@ -54,3 +54,12 @@ export function cx(...classes: Array<string | false | null | undefined>): string
 export function pluralPosts(n: number): string {
   return n === 1 ? 'פוסט אחד' : `${n} פוסטים`;
 }
+
+/** Hebrew greeting for the current hour in Israel. */
+export function greeting(now: string = toLocal()): string {
+  const hour = Number(now.slice(11, 13));
+  if (hour >= 5 && hour < 12) return 'בוקר טוב';
+  if (hour >= 12 && hour < 17) return 'צהריים טובים';
+  if (hour >= 17 && hour < 22) return 'ערב טוב';
+  return 'לילה טוב';
+}
