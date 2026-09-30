@@ -11,13 +11,13 @@ import { createPostgresDb } from '../src/server/db/postgres.ts';
 import { ServiceAccountTokenProvider, parseServiceAccount } from '../src/server/google-auth.ts';
 import { importSheet, type SheetGrids } from '../src/server/sheet-import.ts';
 import { SheetsClient, a1 } from '../src/server/sheets.ts';
-import { env, fail, need, root } from './cli-env.ts';
+import { databaseUrl, env, fail, need, root } from './cli-env.ts';
 
-const { DATABASE_URL, GOOGLE_SERVICE_ACCOUNT_JSON, SPREADSHEET_ID } = need('DATABASE_URL', 'GOOGLE_SERVICE_ACCOUNT_JSON', 'SPREADSHEET_ID');
+const { GOOGLE_SERVICE_ACCOUNT_JSON, SPREADSHEET_ID } = need('GOOGLE_SERVICE_ACCOUNT_JSON', 'SPREADSHEET_ID');
 const TABS = ['calendar', 'campaigns', 'products', 'brand', 'config'] as const;
 
 const sheets = new SheetsClient(SPREADSHEET_ID, new ServiceAccountTokenProvider(parseServiceAccount(GOOGLE_SERVICE_ACCOUNT_JSON)));
-const db = createPostgresDb(DATABASE_URL);
+const db = createPostgresDb(databaseUrl());
 try {
   const existing = new Set(await sheets.sheetTitles());
   const present = TABS.filter((t) => existing.has(t));

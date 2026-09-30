@@ -4,12 +4,11 @@
  *   npm run db:set -- app_url https://...   set a value
  */
 import { createPostgresDb } from '../src/server/db/postgres.ts';
-import { fail, need } from './cli-env.ts';
+import { databaseUrl, fail } from './cli-env.ts';
 
 const SECRET = /token|secret|password|key$/i;
 const [key, ...rest] = process.argv.slice(2);
-const { DATABASE_URL } = need('DATABASE_URL');
-const db = createPostgresDb(DATABASE_URL);
+const db = createPostgresDb(databaseUrl());
 
 try {
   if (!key) {
