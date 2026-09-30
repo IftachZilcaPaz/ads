@@ -1,6 +1,7 @@
 node_modules/
 dist/
 n8n/dist/
+n8n/backups/
 .netlify/
 .env
 .env.*

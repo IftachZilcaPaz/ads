@@ -14,7 +14,8 @@
     "test": "vitest run",
     "check": "npm run typecheck && npm run test && npm run build",
     "n8n:build": "node scripts/build-n8n.mjs",
-    "n8n:check": "node scripts/build-n8n.mjs --check"
+    "n8n:check": "node scripts/build-n8n.mjs --check",
+    "n8n:deploy": "node scripts/deploy-n8n.mjs"
   },
   "repository": {
     "type": "git",

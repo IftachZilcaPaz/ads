@@ -42,17 +42,43 @@
 
 ## 4. n8n
 
-```bash
-npm install
-cp .env.example .env      # למלא SPREADSHEET_ID ו-TELEGRAM_CHAT_ID (כמו telegram_chat_id בלשונית config)
-npm run n8n:build         # יוצר n8n/dist/*.json
-```
+> **קודם שלב 3**: הגיליון חייב כבר לכלול את העמודות והלשוניות החדשות (כניסה אחת לאפליקציה ב-Netlify מוסיפה אותן), אחרת BP 1 ו-BP 2 ייפלו.
 
-לכל workflow (BP 1 עד BP 5):
-1. פותחים ב-n8n את ה-workflow הקיים ומוחקים את כל ה-nodes (Ctrl+A ואז Delete).
-2. **⋯ → Import from File** ובוחרים את הקובץ המתאים מ-`n8n/dist/`. ה-workflow נשאר אותו workflow, וה-webhook של הטלגרם נשמר.
-3. ב-**Settings** של ה-workflow מוודאים: Timezone = `Asia/Jerusalem`, ו-Error workflow = `BP 5 - Error Alert` (לא צריך ב-BP 5 עצמו).
-4. **Save** ואז **Active**.
+### דרך א': פקודה אחת (מומלץ)
+
+דרך ה-API הציבורי של n8n, שלא דורש Enterprise (ב-Cloud רק לא בתקופת ניסיון). כל workflow מתעדכן במקום עם אותו מזהה, כך שה-webhook של הטלגרם וקישור ה-error workflow נשמרים.
+
+1. ב-n8n: **Settings → n8n API → Create an API key**.
+2. ב-`.env` (מ-`.env.example`):
+   ```
+   SPREADSHEET_ID=...
+   TELEGRAM_CHAT_ID=...
+   N8N_URL=https://<your-instance>.app.n8n.cloud
+   N8N_API_KEY=...
+   ```
+3. להריץ:
+   ```bash
+   npm run n8n:deploy -- --dry-run   # מה יתעדכן, בלי לגעת בכלום
+   npm run n8n:deploy                # מעדכן את כל ה-5 ומפעיל
+   ```
+
+אפשרויות נוספות:
+
+| פקודה | מה עושה |
+|---|---|
+| `npm run n8n:deploy -- --only bp1-publisher,bp3-watchdog` | רק workflows מסוימים |
+| `npm run n8n:deploy -- --no-activate` | מעדכן ולא מפעיל |
+| `npm run n8n:deploy -- --restore n8n/backups/<file>.json` | מחזיר גרסה קודמת |
+
+לפני כל החלפה, הגרסה הקודמת נשמרת ב-`n8n/backups/` (מחוץ לגיט). אם הפעלה של workflow נכשלת, בדרך כלל בגלל credential, מופיעה ⚠️ עם שם ה-node, והשאר ממשיכים.
+
+### דרך ב': ידנית
+
+```bash
+npm run n8n:build                        # יוצר n8n/dist/*.json
+pbcopy < n8n/dist/bp1-publisher.json     # במק: מעתיק ללוח
+```
+ב-n8n: לפתוח את ה-workflow הקיים, Cmd+A, Delete, Cmd+V. ב-**Settings**: Timezone = `Asia/Jerusalem`, ו-Error workflow = `BP 5 - Error Alert`. אחר כך **Save** ו-**Active**. הסדר: BP 5, BP 4, BP 3, BP 1, BP 2.
 
 ה-credentials מזוהים לפי השם `ReynovationSocial`. אם n8n מסמן node באדום, בוחרים שוב את ה-credential ב-node.
 

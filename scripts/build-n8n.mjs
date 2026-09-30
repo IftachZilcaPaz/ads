@@ -10,24 +10,13 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadEnv, localValues, localize } from '../n8n/src/local.mjs';
 import { WORKFLOWS } from '../n8n/src/workflows.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const committedDir = join(root, 'n8n', 'workflows');
 const distDir = join(root, 'n8n', 'dist');
 const check = process.argv.includes('--check');
-
-function loadDotEnv() {
-  const file = join(root, '.env');
-  if (!existsSync(file)) return {};
-  return Object.fromEntries(
-    readFileSync(file, 'utf8')
-      .split('\n')
-      .map((l) => /^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/.exec(l))
-      .filter(Boolean)
-      .map(([, k, v]) => [k, v.replace(/^['"]|['"]$/g, '')]),
-  );
-}
 
 const render = (wf) => `${JSON.stringify(wf, null, 2)}\n`;
 let stale = [];
@@ -52,18 +41,13 @@ if (check) {
   process.exit(0);
 }
 
-const env = { ...loadDotEnv(), ...process.env };
-const values = { __SPREADSHEET_ID__: env.SPREADSHEET_ID, __TELEGRAM_CHAT_ID__: env.TELEGRAM_CHAT_ID };
-const missing = Object.entries(values).filter(([, v]) => !v).map(([k]) => k.replace(/__/g, ''));
-
+const { values, missing } = localValues(loadEnv(root));
 if (missing.length) {
   console.log(`Wrote n8n/workflows/. Set ${missing.join(' and ')} (env or .env) to also produce ready-to-import n8n/dist/.`);
 } else {
   mkdirSync(distDir, { recursive: true });
   for (const [file, wf] of Object.entries(WORKFLOWS)) {
-    let json = render(wf);
-    for (const [k, v] of Object.entries(values)) json = json.replaceAll(k, JSON.stringify(v).slice(1, -1));
-    writeFileSync(join(distDir, `${file}.json`), json);
+    writeFileSync(join(distDir, `${file}.json`), render(localize(wf, values)));
   }
   console.log('Wrote n8n/workflows/ and ready-to-import n8n/dist/');
 }

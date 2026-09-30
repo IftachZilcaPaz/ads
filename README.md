@@ -60,7 +60,7 @@ Claude מקבל: את התמונה, את **קול המותג** (לשונית "מ
 1. **Netlify**: Add new site → Import from GitHub → הריפו הזה. ההגדרות כבר ב-`netlify.toml`.
 2. **משתני סביבה** ב-Netlify לפי [`.env.example`](.env.example): `APP_PASSWORD`, `SESSION_SECRET`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `SPREADSHEET_ID`, `ANTHROPIC_API_KEY`, `API_TOKEN`.
 3. **הגיליון**: לשתף עם ה-`client_email` של ה-service account (Editor). בלשונית `config` להוסיף `app_url`, `app_api_token`, ואם רוצים `approval_lead_hours`.
-4. **n8n**: `cp .env.example .env`, למלא `SPREADSHEET_ID` ו-`TELEGRAM_CHAT_ID`, להריץ `npm run n8n:build`, ולייבא את `n8n/dist/*.json` לתוך ה-workflows הקיימים.
+4. **n8n**: למלא ב-`.env` את `SPREADSHEET_ID`, `TELEGRAM_CHAT_ID`, `N8N_URL` ו-`N8N_API_KEY`, ולהריץ `npm run n8n:deploy`. הפקודה מעדכנת ומפעילה את כל ה-workflows דרך ה-API, בלי ייבוא ידני.
 
 ## פיתוח
 
@@ -69,6 +69,7 @@ npm install
 npm run dev       # הכול בפקודה אחת: http://localhost:5199 (סיסמה: dev), נתוני דוגמה בזיכרון, בלי Google
 npm run check     # typecheck + טסטים + build
 npm run n8n:build # מייצר את ה-workflows מ-n8n/src
+npm run n8n:deploy -- --dry-run  # מה יתעדכן ב-n8n
 ```
 
 ## אבטחה
