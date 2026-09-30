@@ -44,6 +44,12 @@ export function Calendar() {
 
   return (
     <>
+      <header class="page-head">
+        <span class="eyebrow">יומן</span>
+        <h1>
+          החודש <em>במבט אחד</em>
+        </h1>
+      </header>
       <div class="cal-toolbar">
         <button type="button" onClick={() => setMonth(shiftMonth(month, -1))} aria-label="החודש הקודם">
           →

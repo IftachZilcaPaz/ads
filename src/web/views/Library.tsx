@@ -95,7 +95,13 @@ export function Library() {
 
   return (
     <div class="library">
-      <header class="page-head row">
+      <header class="page-head">
+        <span class="eyebrow">ספרייה</span>
+        <h1>
+          קמפיינים <em>ומוצרים</em>
+        </h1>
+      </header>
+      <div class="toolbar">
         <div class="segmented">
           <button type="button" class={cx(isCampaigns && 'on')} onClick={() => setTab('campaigns')}>
             📣 קמפיינים ({data.campaigns.length})
@@ -107,7 +113,7 @@ export function Library() {
         <button type="button" class="primary" onClick={() => setEditing(blank(isCampaigns ? CAMPAIGN_COLUMNS : PRODUCT_COLUMNS))}>
           + {isCampaigns ? 'קמפיין' : 'מוצר'} חדש
         </button>
-      </header>
+      </div>
 
       {!items.length && (
         <p class="empty big">

@@ -3,6 +3,7 @@ import { api, setUnauthorizedHandler } from './api.ts';
 import { Toasts } from './components/Toasts.tsx';
 import { useLocation, type Route } from './router.ts';
 import { AppProvider, useApp } from './state.tsx';
+import { Icon, type IconName } from './icons.tsx';
 import { cx } from './ui.ts';
 import { Board } from './views/Board.tsx';
 import { BrandView } from './views/BrandView.tsx';
@@ -11,12 +12,12 @@ import { Library } from './views/Library.tsx';
 import { Login } from './views/Login.tsx';
 import { Studio } from './views/Studio.tsx';
 
-const NAV: { route: Route; label: string }[] = [
-  { route: 'board', label: '🗂 לוח' },
-  { route: 'calendar', label: '📅 יומן' },
-  { route: 'studio', label: '✨ סטודיו' },
-  { route: 'library', label: '📣 קמפיינים ומוצרים' },
-  { route: 'brand', label: '🎙 מותג' },
+const NAV: { route: Route; label: string; icon: IconName }[] = [
+  { route: 'board', label: 'לוח', icon: 'board' },
+  { route: 'calendar', label: 'יומן', icon: 'calendar' },
+  { route: 'studio', label: 'סטודיו', icon: 'sparkles' },
+  { route: 'library', label: 'קמפיינים ומוצרים', icon: 'megaphone' },
+  { route: 'brand', label: 'מותג', icon: 'mic' },
 ];
 
 type AuthState = 'checking' | 'in' | 'out';
@@ -49,28 +50,46 @@ function Shell({ onLogout }: { onLogout: () => void }) {
   return (
     <>
       <header class="topbar">
+        <a class="brand" href="#/board" aria-label="BP Social">
+          <span class="brand-mark">
+            <Icon name="camera" size={18} />
+          </span>
+          <span class="brand-text">
+            <strong>BP Social</strong>
+            <small>לוח פרסום לאינסטגרם</small>
+          </span>
+        </a>
         <nav>
           {NAV.map((n) => (
-            <a key={n.route} href={`#/${n.route}`} class={cx(route === n.route && 'active')}>
-              {n.label}
+            <a key={n.route} href={`#/${n.route}`} class={cx(route === n.route && 'active')} aria-current={route === n.route ? 'page' : undefined}>
+              <Icon name={n.icon} size={16} />
+              <span>{n.label}</span>
             </a>
           ))}
         </nav>
         <div class="topbar-actions">
-          <button type="button" class="icon" title="רענון" onClick={() => void reload()}>
-            🔄
+          <button type="button" class="icon round" title="רענון" aria-label="רענון" onClick={() => void reload()}>
+            <Icon name="refresh" size={16} />
           </button>
           <button
             type="button"
-            class="icon"
+            class="icon round"
             title="יציאה"
+            aria-label="יציאה"
             onClick={async () => {
               await api.logout().catch(() => undefined);
               onLogout();
             }}
           >
-            ⎋
+            <Icon name="logout" size={16} />
           </button>
+          <a class="cta" href="#/studio" aria-label="פוסט חדש">
+            <span>פוסט חדש</span>
+            <span class="cta-arrow">
+              <Icon name="arrow" size={14} class="ico ico-arrow" />
+              <Icon name="plus" size={16} class="ico ico-plus" />
+            </span>
+          </a>
         </div>
       </header>
       <main class={cx('page', `page-${route}`)}>

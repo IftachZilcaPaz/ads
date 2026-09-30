@@ -6,6 +6,7 @@ import { FilterBar } from '../components/FilterBar.tsx';
 import { PostCard } from '../components/PostCard.tsx';
 import { PostEditor } from '../components/PostEditor.tsx';
 import { usePostActions, usePostFilter } from '../hooks.ts';
+import { Icon } from '../icons.tsx';
 import { useApp } from '../state.tsx';
 import { BUCKET_META, formatWhen, pluralPosts } from '../ui.ts';
 
@@ -62,21 +63,40 @@ export function Board() {
 
   return (
     <>
+      <header class="page-head">
+        <span class="eyebrow">לוח הפרסום</span>
+        <h1>
+          מה עולה <em>ומתי</em>
+        </h1>
+      </header>
+
       <section class="summary">
         <div class="stat">
+          <span class="tile amber">
+            <Icon name="clock" />
+          </span>
           <strong>{summary.awaiting}</strong>
           <span>ממתינים לאישור שלך</span>
         </div>
         <div class="stat">
+          <span class="tile blue">
+            <Icon name="check" />
+          </span>
           <strong>{summary.approvedWeek}</strong>
           <span>מאושרים ל-7 ימים</span>
         </div>
         <div class="stat wide">
+          <span class="tile violet">
+            <Icon name="send" />
+          </span>
           <strong>{summary.next ? formatWhen(summary.next.publish_at) : '—'}</strong>
           <span>{summary.next ? 'הפוסט המאושר הבא' : 'אין פוסט מאושר בתור'}</span>
         </div>
         {summary.problems > 0 && (
           <div class="stat bad">
+            <span class="tile rose">
+              <Icon name="alert" />
+            </span>
             <strong>{summary.problems}</strong>
             <span>דורשים טיפול</span>
           </div>

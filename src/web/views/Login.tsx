@@ -1,5 +1,6 @@
 import { useState } from 'preact/hooks';
 import { api } from '../api.ts';
+import { Icon } from '../icons.tsx';
 
 export function Login({ onSuccess }: { onSuccess: () => void }) {
   const [password, setPassword] = useState('');
@@ -24,7 +25,13 @@ export function Login({ onSuccess }: { onSuccess: () => void }) {
           }
         }}
       >
-        <h1>📸 לוח פרסום</h1>
+        <span class="brand-mark big">
+          <Icon name="camera" size={24} />
+        </span>
+        <span class="eyebrow">BP Social</span>
+        <h1>
+          לוח <em>הפרסום</em>
+        </h1>
         <label class="field">
           <span>סיסמה</span>
           <input type="password" autoComplete="current-password" autoFocus value={password} onInput={(e) => setPassword(e.currentTarget.value)} />

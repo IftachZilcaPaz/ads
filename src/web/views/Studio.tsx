@@ -22,7 +22,10 @@ export function Studio({ query }: { query: URLSearchParams }) {
   return (
     <div class="studio">
       <header class="page-head">
-        <h1>✨ סטודיו</h1>
+        <span class="eyebrow">סטודיו</span>
+        <h1>
+          תמונה, קפשן, <em>ולאישור</em>
+        </h1>
         <p class="muted">מעלים תמונה, בוחרים קמפיין או מוצר, והעוזר כותב קפשן בקול של המותג. אתה מאשר - והוא עולה בזמן.</p>
       </header>
 

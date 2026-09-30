@@ -42,7 +42,10 @@ export function BrandView() {
   return (
     <div class="brand-page">
       <header class="page-head">
-        <h1>🎙 קול המותג</h1>
+        <span class="eyebrow">מותג</span>
+        <h1>
+          קול <em>המותג</em>
+        </h1>
         <p class="muted">עוזר הקפשנים קורא את זה לפני כל קפשן. ככל שזה מדויק יותר - פחות תצטרך לתקן.</p>
       </header>
       <EntityForm
