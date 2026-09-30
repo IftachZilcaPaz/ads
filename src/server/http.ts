@@ -2,8 +2,7 @@ import { z } from 'zod';
 import { DomainError } from '../shared/post.ts';
 import { ConfigError } from './env.ts';
 import { isAuthorized, isSameOrigin, type AuthSecrets } from './session.ts';
-import { UpstreamError } from './sheets.ts';
-import { ConflictError, NotFoundError } from './table.ts';
+import { ConflictError, NotFoundError, UpstreamError } from './errors.ts';
 
 export class HttpError extends Error {
   constructor(
@@ -51,7 +50,7 @@ export function errorResponse(err: unknown): Response {
   if (err instanceof ConflictError) return json({ error: err.message }, { status: 409 });
   if (err instanceof UpstreamError) {
     console.error(err);
-    return json({ error: 'Google Sheets לא זמין כרגע, נסה שוב' }, { status: 502 });
+    return json({ error: err.message }, { status: 502 });
   }
   if (err instanceof ConfigError) {
     console.error(err);

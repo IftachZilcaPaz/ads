@@ -1,7 +1,9 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApi } from '../src/server/api.ts';
-import { MemorySheets } from '../src/server/memory-sheets.ts';
 import { a1, columnLetter } from '../src/server/sheets.ts';
+import { CAMPAIGN_COLUMNS, PRODUCT_COLUMNS } from '../src/shared/catalog.ts';
+import { POST_COLUMNS } from '../src/shared/post.ts';
+import { insertRows, testDb } from './helpers/db.ts';
 import { createSessionToken, secretsEqual, verifySessionToken, SESSION_COOKIE } from '../src/server/session.ts';
 import { Store } from '../src/server/store.ts';
 import { parseServiceAccount, signServiceAccountJwt } from '../src/server/google-auth.ts';
@@ -9,26 +11,30 @@ import { parseServiceAccount, signServiceAccountJwt } from '../src/server/google
 const SECRET = 'x'.repeat(40);
 const IMG = 'https://res.cloudinary.com/demo/image/upload/v1/a.jpg';
 
-function setup() {
-  const sheets = new MemorySheets();
-  // A legacy spreadsheet: original 9 columns, config tab with secrets.
-  sheets.tabs.set('calendar', [
-    ['id', 'publish_at', 'type', 'media_urls', 'caption', 'approval_mode', 'status', 'ig_media_id', 'error'],
-    ['old-1', '2026-10-01 19:00', 'POST', IMG, 'hello', 'approve', 'draft', '', ''],
-    ['', '', '', '', '', '', '', '', ''],
-    ['old-2', '2026-10-02 19:00', 'POST', IMG, 'published one', 'auto', 'published', '179', ''],
-  ]);
-  sheets.tabs.set('config', [
-    ['key', 'value'],
-    ['access_token', 'SECRET-META-TOKEN'],
-    ['cloudinary_cloud', 'demo'],
-    ['cloudinary_preset', 'unsigned'],
-  ]);
-  const store = new Store(sheets);
-  return { sheets, store };
-}
+const LEGACY: Record<string, string>[] = [
+  { id: 'old-1', publish_at: '2026-10-01 19:00', media_urls: IMG, caption: 'hello', status: 'draft' },
+  { id: 'old-2', publish_at: '2026-10-02 19:00', media_urls: IMG, caption: 'published one', approval_mode: 'auto', status: 'published', ig_media_id: '179' },
+];
 
-describe('sheets helpers', () => {
+let ctx: Awaited<ReturnType<typeof testDb>>;
+let store: Store;
+
+beforeAll(async () => {
+  ctx = await testDb();
+  store = new Store(ctx.db);
+});
+
+beforeEach(async () => {
+  await ctx.reset();
+  await insertRows(ctx.db, 'posts', LEGACY);
+  await insertRows(ctx.db, 'settings', [
+    { key: 'access_token', value: 'SECRET-META-TOKEN' },
+    { key: 'cloudinary_cloud', value: 'demo' },
+    { key: 'cloudinary_preset', value: 'unsigned' },
+  ]);
+});
+
+describe('sheets helpers (sheet import)', () => {
   it('builds A1 references', () => {
     expect(columnLetter(0)).toBe('A');
     expect(columnLetter(25)).toBe('Z');
@@ -38,66 +44,80 @@ describe('sheets helpers', () => {
 });
 
 describe('Store', () => {
-  let ctx: ReturnType<typeof setup>;
-  beforeEach(() => {
-    ctx = setup();
+  it('loads everything in one snapshot, hiding archived posts', async () => {
+    await store.actOnPost('old-2', 'archive');
+    const snap = await store.snapshot();
+    expect(snap.posts.map((p) => p.id)).toEqual(['old-1']);
+    expect(snap.brand).toMatchObject({ emoji: 'light', language: 'he' });
   });
 
-  it('migrates the spreadsheet schema without touching existing data', async () => {
-    const snap = await ctx.store.snapshot();
-    const headers = ctx.sheets.tabs.get('calendar')![0]!;
-    expect(headers.slice(0, 9)).toEqual(['id', 'publish_at', 'type', 'media_urls', 'caption', 'approval_mode', 'status', 'ig_media_id', 'error']);
-    expect(headers).toContain('approved_at');
-    expect(ctx.sheets.tabs.has('campaigns')).toBe(true);
-    expect(snap.posts.map((p) => p.id)).toEqual(['old-1', 'old-2']);
-  });
-
-  it('never exposes secrets from the config tab', async () => {
-    const snap = await ctx.store.snapshot();
+  it('never exposes secret settings', async () => {
+    const snap = await store.snapshot();
     expect(snap.settings).toEqual({ cloudinary_cloud: 'demo', cloudinary_preset: 'unsigned' });
     expect(JSON.stringify(snap)).not.toContain('SECRET-META-TOKEN');
   });
 
-  it('approves by writing only the changed cells of the right row', async () => {
-    await ctx.store.snapshot();
-    ctx.sheets.writes = [];
-    const post = await ctx.store.actOnPost('old-1', 'approve');
+  it('approves and persists the transition', async () => {
+    const post = await store.actOnPost('old-1', 'approve');
     expect(post.status).toBe('ready');
-    const ranges = ctx.sheets.writes.map((w) => w.range);
-    expect(ranges.every((r) => r.endsWith('2'))).toBe(true);
-    expect(ranges).toContain("'calendar'!G2"); // status
-    expect(ranges).not.toContain("'calendar'!E2"); // caption untouched
+    const [row] = await ctx.db.query<Record<string, string>>('select status, approved_at from posts where id = $1', ['old-1']);
+    expect(row).toMatchObject({ status: 'ready', approved_at: post.approved_at });
+    expect(row!.approved_at).not.toBe('');
   });
 
   it('refuses to edit published posts', async () => {
-    await expect(ctx.store.editPost('old-2', { caption: 'x' })).rejects.toThrow(/לא ניתן לעריכה/);
+    await expect(store.editPost('old-2', { caption: 'x' })).rejects.toThrow(/לא ניתן לעריכה/);
   });
 
   it('creates posts and rejects duplicate ids', async () => {
-    const created = await ctx.store.createPost({ id: 'new-1', media_urls: IMG, caption: 'c' });
+    const created = await store.createPost({ id: 'new-1', media_urls: IMG, caption: 'c' });
     expect(created.status).toBe('draft');
-    await expect(ctx.store.createPost({ id: 'new-1' })).rejects.toThrow(/כבר קיים/);
-    const snap = await ctx.store.snapshot();
+    await expect(store.createPost({ id: 'new-1' })).rejects.toThrow(/כבר קיים/);
+    const snap = await store.snapshot();
     expect(snap.posts.find((p) => p.id === 'new-1')?.caption).toBe('c');
   });
 
   it('bulk-approves and reports invalid posts', async () => {
-    await ctx.store.createPost({ id: 'bad-1' });
-    const res = await ctx.store.bulkAct(['old-1', 'bad-1', 'missing'], 'approve');
+    await store.createPost({ id: 'bad-1' });
+    const res = await store.bulkAct(['old-1', 'bad-1', 'missing'], 'approve');
     expect(res.updated.map((p) => p.id)).toEqual(['old-1']);
     expect(res.failed.map((f) => f.id)).toEqual(['bad-1', 'missing']);
   });
 
+  it('duplicates a post as a new draft', async () => {
+    const copy = await store.duplicatePost('old-2');
+    expect(copy).toMatchObject({ status: 'draft', caption: 'published one', ig_media_id: '' });
+    expect(copy.id).not.toBe('old-2');
+  });
+
   it('saves campaigns, products and brand', async () => {
-    const c = await ctx.store.saveCampaign({ name: 'חורף 2026', hashtags: 'winter' });
+    const c = await store.saveCampaign({ name: 'חורף 2026', hashtags: 'winter' });
     expect(c.id).toMatch(/^c-/);
-    const updated = await ctx.store.saveCampaign({ ...c, goal: 'מכירות' }, c.id);
+    const updated = await store.saveCampaign({ ...c, goal: 'מכירות' }, c.id);
     expect(updated.goal).toBe('מכירות');
-    await expect(ctx.store.saveProduct({ name: '' })).rejects.toThrow(/חסר שם מוצר/);
-    await ctx.store.saveBrand({ name: 'Reynovation', voice: 'חם ואישי', emoji: 'none' });
-    const snap = await ctx.store.snapshot();
+    await expect(store.saveCampaign({ name: 'x' }, 'nope')).rejects.toThrow(/לא נמצא/);
+    await expect(store.saveProduct({ name: '' })).rejects.toThrow(/חסר שם מוצר/);
+    await store.saveProduct({ id: 'kitchen', name: 'מטבח' });
+    await expect(store.saveProduct({ id: 'kitchen', name: 'שוב' })).rejects.toThrow(/כבר קיים/);
+    await store.saveBrand({ name: 'Reynovation', voice: 'חם ואישי', emoji: 'none' });
+    await store.saveBrand({ name: 'Reynovation', voice: 'חם', emoji: 'none' });
+    const snap = await store.snapshot();
     expect(snap.campaigns[0]?.goal).toBe('מכירות');
-    expect(snap.brand).toMatchObject({ name: 'Reynovation', voice: 'חם ואישי', emoji: 'none', language: 'he' });
+    expect(snap.products.map((p) => p.id)).toEqual(['kitchen']);
+    expect(snap.brand).toMatchObject({ name: 'Reynovation', voice: 'חם', emoji: 'none', language: 'he' });
+  });
+
+  it('keeps the schema columns in sync with the domain model', async () => {
+    const cols = async (table: string) =>
+      (
+        await ctx.db.query<{ column_name: string }>(
+          'select column_name from information_schema.columns where table_name = $1 order by ordinal_position',
+          [table],
+        )
+      ).map((r) => r.column_name);
+    expect(await cols('posts')).toEqual([...POST_COLUMNS]);
+    expect(await cols('campaigns')).toEqual(CAMPAIGN_COLUMNS);
+    expect(await cols('products')).toEqual(PRODUCT_COLUMNS);
   });
 });
 
@@ -117,7 +137,6 @@ describe('sessions', () => {
 });
 
 describe('API router', () => {
-  const { store } = setup();
   const api = createApi({
     store: () => store,
     secrets: () => ({ sessionSecret: SECRET, apiToken: 'automation-token' }),

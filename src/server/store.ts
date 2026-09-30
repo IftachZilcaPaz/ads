@@ -23,28 +23,12 @@ import {
   type PostAction,
   type PostChanges,
 } from '../shared/post.ts';
-import { a1, type SheetsPort } from './sheets.ts';
-import { ConflictError, diffUpdates, ensureTabs, findRow, parseGrid, rowValues, type Table, type TabSpec } from './table.ts';
+import type { Db } from './db/db.ts';
+import { ConflictError, NotFoundError } from './errors.ts';
 
-export const TABS = {
-  calendar: 'calendar',
-  campaigns: 'campaigns',
-  products: 'products',
-  brand: 'brand',
-  config: 'config',
-} as const;
-
-const SPECS: TabSpec[] = [
-  { name: TABS.calendar, columns: POST_COLUMNS },
-  { name: TABS.campaigns, columns: CAMPAIGN_COLUMNS },
-  { name: TABS.products, columns: PRODUCT_COLUMNS },
-  { name: TABS.brand, columns: ['key', 'value'] },
-  { name: TABS.config, columns: ['key', 'value'] },
-];
-
-/** Config keys that are safe to expose to the browser. Never the Meta token. */
-const PUBLIC_CONFIG_KEYS = ['cloudinary_cloud', 'cloudinary_preset'] as const;
-export type PublicSettings = Record<(typeof PUBLIC_CONFIG_KEYS)[number], string>;
+/** Settings the browser may see. Never the Meta token or API secrets. */
+const PUBLIC_SETTING_KEYS = ['cloudinary_cloud', 'cloudinary_preset'] as const;
+export type PublicSettings = Record<(typeof PUBLIC_SETTING_KEYS)[number], string>;
 
 export interface Snapshot {
   posts: Post[];
@@ -54,77 +38,82 @@ export interface Snapshot {
   settings: PublicSettings;
 }
 
+const quoted = (keys: readonly string[]) => keys.map((k) => `'${k.replace(/'/g, "''")}'`).join(', ');
+
+/** Everything the app shows, in one round trip. */
+const SNAPSHOT_SQL = `
+select
+  (select coalesce(jsonb_agg(to_jsonb(p) order by p.publish_at, p.id), '[]'::jsonb) from posts p where p.status <> 'archived') as posts,
+  (select coalesce(jsonb_agg(to_jsonb(c) order by c.name), '[]'::jsonb) from campaigns c) as campaigns,
+  (select coalesce(jsonb_agg(to_jsonb(x) order by x.name), '[]'::jsonb) from products x) as products,
+  (select coalesce(jsonb_object_agg(key, value), '{}'::jsonb) from brand) as brand,
+  (select coalesce(jsonb_object_agg(key, value), '{}'::jsonb) from settings where key in (${quoted(PUBLIC_SETTING_KEYS)})) as settings`;
+
+const POST_UPDATE_COLUMNS = POST_COLUMNS.filter((c) => c !== 'id');
+const UPDATE_POST_SQL = `update posts set ${POST_UPDATE_COLUMNS.map((c, i) => `${c} = $${i + 2}`).join(', ')} where id = $1`;
+const INSERT_POST_SQL = `insert into posts (${POST_COLUMNS.join(', ')}) values (${POST_COLUMNS.map((_, i) => `$${i + 1}`).join(', ')})
+  on conflict (id) do nothing returning id`;
+
 type CatalogKind = 'campaigns' | 'products';
 const CATALOG = {
-  campaigns: { schema: CampaignSchema, prefix: 'c' },
-  products: { schema: ProductSchema, prefix: 'p' },
+  campaigns: { schema: CampaignSchema, prefix: 'c', columns: CAMPAIGN_COLUMNS as readonly string[] },
+  products: { schema: ProductSchema, prefix: 'p', columns: PRODUCT_COLUMNS as readonly string[] },
 } as const;
 
-function kvRecord(table: Table): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const { record } of table.rows) out[(record.key ?? '').trim()] = record.value ?? '';
-  return out;
-}
-
 /**
- * Repository over the spreadsheet. Every operation reads fresh data (the
- * sheet is small and is also written by n8n), then writes the minimal diff.
+ * Repository over Postgres. Post mutations lock the row (SELECT ... FOR
+ * UPDATE), so they serialize with n8n's claim/decide functions: a post can't
+ * be edited or unapproved while it is being published, and vice versa.
  */
 export class Store {
-  private schemaReady: Promise<void> | null = null;
-
-  constructor(private readonly sheets: SheetsPort) {}
-
-  private ensureSchema(): Promise<void> {
-    this.schemaReady ??= ensureTabs(this.sheets, SPECS).catch((err: unknown) => {
-      this.schemaReady = null;
-      throw err;
-    });
-    return this.schemaReady;
-  }
-
-  private async read(names: string[], keyColumns: Record<string, string> = {}): Promise<Table[]> {
-    await this.ensureSchema();
-    const grids = await this.sheets.batchGet(names.map((n) => a1(n)));
-    return names.map((n, i) => parseGrid(n, grids[i] ?? [], keyColumns[n] ?? 'id'));
-  }
-
-  private async readOne(name: string, keyColumn = 'id'): Promise<Table> {
-    const [table] = await this.read([name], { [name]: keyColumn });
-    return table!;
-  }
+  constructor(private readonly db: Db) {}
 
   async snapshot(): Promise<Snapshot> {
-    const [calendar, campaigns, products, brand, config] = await this.read(
-      [TABS.calendar, TABS.campaigns, TABS.products, TABS.brand, TABS.config],
-      { [TABS.brand]: 'key', [TABS.config]: 'key' },
-    );
-    const cfg = kvRecord(config!);
+    const [row] = await this.db.query<{
+      posts: Record<string, string>[];
+      campaigns: Record<string, string>[];
+      products: Record<string, string>[];
+      brand: Record<string, string>;
+      settings: Record<string, string>;
+    }>(SNAPSHOT_SQL);
+    const settings = Object.fromEntries(PUBLIC_SETTING_KEYS.map((k) => [k, (row!.settings[k] ?? '').trim()])) as PublicSettings;
     return {
-      posts: calendar!.rows.map((r) => toPost(r.record)),
-      campaigns: campaigns!.rows.map((r) => parseEntity(CampaignSchema, r.record)).filter((c): c is Campaign => !!c),
-      products: products!.rows.map((r) => parseEntity(ProductSchema, r.record)).filter((p): p is Product => !!p),
-      brand: BrandSchema.parse(kvRecord(brand!)),
-      settings: Object.fromEntries(PUBLIC_CONFIG_KEYS.map((k) => [k, (cfg[k] ?? '').trim()])) as PublicSettings,
+      posts: row!.posts.map(toPost),
+      campaigns: row!.campaigns.map((r) => parseEntity(CampaignSchema, r)).filter((c): c is Campaign => !!c),
+      products: row!.products.map((r) => parseEntity(ProductSchema, r)).filter((p): p is Product => !!p),
+      brand: BrandSchema.parse(row!.brand),
+      settings,
     };
   }
 
   // ---------- posts ----------
 
-  async createPost(input: NewPostInput): Promise<Post> {
-    const table = await this.readOne(TABS.calendar);
-    const post = createPost(input);
-    if (table.rows.some((r) => r.record.id === post.id)) throw new ConflictError(`כבר קיים פוסט עם המזהה ${post.id}`);
-    await this.sheets.append(a1(TABS.calendar), [rowValues(table.headers, post)]);
+  private async insertPost(db: Db, post: Post): Promise<Post> {
+    const rows = await db.query(INSERT_POST_SQL, POST_COLUMNS.map((c) => post[c]));
+    if (!rows.length) throw new ConflictError(`כבר קיים פוסט עם המזהה ${post.id}`);
     return post;
   }
 
-  private async mutatePost(id: string, fn: (post: Post) => Post): Promise<Post> {
-    const table = await this.readOne(TABS.calendar);
-    const row = findRow(table, id);
-    const next = fn(toPost(row.record));
-    await this.sheets.batchUpdate(diffUpdates(table, row, next));
-    return next;
+  createPost(input: NewPostInput): Promise<Post> {
+    return this.insertPost(this.db, createPost(input));
+  }
+
+  private async lockPost(db: Db, id: string): Promise<Post> {
+    const [row] = await db.query<Record<string, string>>('select * from posts where id = $1 for update', [id]);
+    if (!row) throw new NotFoundError(`לא נמצא: ${id}`);
+    return toPost(row);
+  }
+
+  private async savePost(db: Db, post: Post): Promise<void> {
+    await db.query(UPDATE_POST_SQL, [post.id, ...POST_UPDATE_COLUMNS.map((c) => post[c])]);
+  }
+
+  private mutatePost(id: string, fn: (post: Post) => Post): Promise<Post> {
+    return this.db.tx(async (t) => {
+      const next = fn(await this.lockPost(t, id));
+      await this.savePost(t, next);
+      return next;
+    });
   }
 
   editPost(id: string, changes: PostChanges): Promise<Post> {
@@ -135,41 +124,42 @@ export class Store {
     return this.mutatePost(id, (post) => transition(post, action));
   }
 
-  /** Applies an action to many posts in one read + one write. Invalid ones are reported, not fatal. */
-  async bulkAct(ids: string[], action: PostAction): Promise<{ updated: Post[]; failed: { id: string; error: string }[] }> {
-    const table = await this.readOne(TABS.calendar);
-    const updated: Post[] = [];
-    const failed: { id: string; error: string }[] = [];
-    const writes = [];
-    for (const id of new Set(ids)) {
-      try {
-        const row = findRow(table, id);
-        const next = transition(toPost(row.record), action);
-        writes.push(...diffUpdates(table, row, next));
-        updated.push(next);
-      } catch (err) {
-        failed.push({ id, error: err instanceof Error ? err.message : String(err) });
+  /** Applies an action to many posts in one transaction. Invalid ones are reported, not fatal. */
+  bulkAct(ids: string[], action: PostAction): Promise<{ updated: Post[]; failed: { id: string; error: string }[] }> {
+    return this.db.tx(async (t) => {
+      const updated: Post[] = [];
+      const failed: { id: string; error: string }[] = [];
+      for (const id of new Set(ids)) {
+        try {
+          const next = transition(await this.lockPost(t, id), action);
+          await this.savePost(t, next);
+          updated.push(next);
+        } catch (err) {
+          if (!(err instanceof DomainError || err instanceof NotFoundError)) throw err;
+          failed.push({ id, error: err.message });
+        }
       }
-    }
-    await this.sheets.batchUpdate(writes);
-    return { updated, failed };
+      return { updated, failed };
+    });
   }
 
   async duplicatePost(id: string): Promise<Post> {
-    const table = await this.readOne(TABS.calendar);
-    const source = toPost(findRow(table, id).record);
-    const copy = createPost({
-      type: source.type,
-      media_urls: source.media_urls,
-      caption: source.caption,
-      approval_mode: source.approval_mode,
-      campaign_id: source.campaign_id,
-      product_id: source.product_id,
-      notes: source.notes,
-      intent: 'draft',
-    });
-    await this.sheets.append(a1(TABS.calendar), [rowValues(table.headers, copy)]);
-    return copy;
+    const [row] = await this.db.query<Record<string, string>>('select * from posts where id = $1', [id]);
+    if (!row) throw new NotFoundError(`לא נמצא: ${id}`);
+    const source = toPost(row);
+    return this.insertPost(
+      this.db,
+      createPost({
+        type: source.type,
+        media_urls: source.media_urls,
+        caption: source.caption,
+        approval_mode: source.approval_mode,
+        campaign_id: source.campaign_id,
+        product_id: source.product_id,
+        notes: source.notes,
+        intent: 'draft',
+      }),
+    );
   }
 
   // ---------- campaigns / products ----------
@@ -182,31 +172,32 @@ export class Store {
     return this.saveCatalogItem('products', input, existingId).then((r) => ProductSchema.parse(r));
   }
 
-  private async saveCatalogItem(
-    kind: CatalogKind,
-    input: Record<string, unknown>,
-    existingId?: string,
-  ): Promise<Record<string, string>> {
-    const { schema, prefix } = CATALOG[kind];
+  private async saveCatalogItem(kind: CatalogKind, input: Record<string, unknown>, existingId?: string): Promise<Record<string, string>> {
+    const { schema, prefix, columns } = CATALOG[kind];
     const parsed = schema.safeParse(input);
     if (!parsed.success) {
       const issues = parsed.error.issues.map((i) => i.message);
       throw new DomainError(issues[0] ?? 'נתונים לא תקינים', issues);
     }
     const item: Record<string, string> = { ...parsed.data };
-    const table = await this.readOne(kind);
+    const fields = columns.filter((c) => c !== 'id');
 
     if (existingId) {
-      const row = findRow(table, existingId);
-      const next = { ...item, id: existingId };
-      await this.sheets.batchUpdate(diffUpdates(table, row, next));
-      return next;
+      const rows = await this.db.query(
+        `update ${kind} set ${fields.map((c, i) => `${c} = $${i + 2}`).join(', ')} where id = $1 returning id`,
+        [existingId, ...fields.map((c) => item[c] ?? '')],
+      );
+      if (!rows.length) throw new NotFoundError(`לא נמצא: ${existingId}`);
+      return { ...item, id: existingId };
     }
 
-    const id = item.id || generateEntityId(prefix);
-    if (table.rows.some((r) => r.record.id === id)) throw new ConflictError(`המזהה ${id} כבר קיים`);
-    const created = { ...item, id };
-    await this.sheets.append(a1(kind), [rowValues(table.headers, created)]);
+    const created: Record<string, string> = { ...item, id: item.id || generateEntityId(prefix) };
+    const rows = await this.db.query(
+      `insert into ${kind} (${columns.join(', ')}) values (${columns.map((_, i) => `$${i + 1}`).join(', ')})
+       on conflict (id) do nothing returning id`,
+      columns.map((c) => created[c] ?? ''),
+    );
+    if (!rows.length) throw new ConflictError(`המזהה ${created.id} כבר קיים`);
     return created;
   }
 
@@ -216,18 +207,14 @@ export class Store {
     const parsed = BrandSchema.safeParse(input);
     if (!parsed.success) throw new DomainError(parsed.error.issues[0]?.message ?? 'נתונים לא תקינים');
     const brand = parsed.data;
-    const table = await this.readOne(TABS.brand, 'key');
-
-    const updates = [];
-    const appends: string[][] = [];
-    for (const key of BRAND_KEYS) {
-      const value = String(brand[key]);
-      const row = table.rows.find((r) => r.record.key === key);
-      if (row) updates.push(...diffUpdates(table, row, { key, value }));
-      else appends.push(rowValues(table.headers, { key, value }));
-    }
-    await this.sheets.batchUpdate(updates);
-    if (appends.length) await this.sheets.append(a1(TABS.brand), appends);
+    await this.db.tx(async (t) => {
+      for (const key of BRAND_KEYS) {
+        await t.query('insert into brand (key, value) values ($1, $2) on conflict (key) do update set value = excluded.value', [
+          key,
+          String(brand[key]),
+        ]);
+      }
+    });
     return brand;
   }
 }

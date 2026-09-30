@@ -1,21 +1,33 @@
 /**
- * In-memory backend for local UI development (no Google, no Netlify).
+ * Local backend for UI development: a real Postgres schema running in-process
+ * (PGlite), seeded with sample data. No Railway, Google or Netlify needed.
  * Mounted into the Vite dev server, so `npm run dev` is the only command.
- * Data is seeded with sample posts and resets on restart. Password: "dev".
- * Captions are canned unless ANTHROPIC_API_KEY is set.
+ * Data resets on restart. Password: "dev". Captions are canned unless
+ * ANTHROPIC_API_KEY is set.
  */
 import { createApi } from './api.ts';
 import { defaultCaptionDeps, handleCaptionRequest } from './captions-handler.ts';
-import { MemorySheets } from './memory-sheets.ts';
+import type { Db } from './db/db.ts';
+import { migrate } from './db/migrate.ts';
+import { loadMigrations } from './db/migrations-fs.ts';
+import { createMemoryDb } from './db/pglite.ts';
 import { Store } from './store.ts';
-import { POST_COLUMNS } from '../shared/post.ts';
 import { addDays, localDate } from '../shared/time.ts';
 
-export function createDevBackend(): (req: Request) => Promise<Response> {
+/** Inserts rows given as column → value objects (dev/test seeding only). */
+export async function insertRows(db: Db, table: string, rows: Record<string, string>[]): Promise<void> {
+  for (const row of rows) {
+    const cols = Object.keys(row);
+    await db.query(`insert into ${table} (${cols.join(', ')}) values (${cols.map((_, i) => `$${i + 1}`).join(', ')})`, Object.values(row));
+  }
+}
+
+export async function createDevBackend(): Promise<(req: Request) => Promise<Response>> {
   process.env.SESSION_SECRET ??= 'dev-secret-dev-secret-dev-secret-dev-secret';
   process.env.API_TOKEN ??= 'dev-token';
 
-  const sheets = new MemorySheets();
+  const db = await createMemoryDb();
+  await migrate(db, loadMigrations());
   const img = (id: string) => `https://picsum.photos/id/${id}/1080/1350`;
   const today = localDate();
   const seed: Record<string, string>[] = [
@@ -26,23 +38,25 @@ export function createDevBackend(): (req: Request) => Promise<Response> {
     { id: 'demo-5', publish_at: `${addDays(today, -1)} 12:00`, media_urls: img('1050'), caption: 'נכשל', status: 'failed', error: 'Meta 9004: Media download failed' },
     { id: 'demo-6', publish_at: `${addDays(today, 4)} 20:30`, media_urls: img('1070'), caption: 'שאלה לקהל: איזה צבע הייתם בוחרים?', status: 'pending_approval', approval_mode: 'approve' },
   ];
-  sheets.tabs.set('calendar', [
-    [...POST_COLUMNS],
-    ...seed.map((r) => POST_COLUMNS.map((c) => r[c] ?? (c === 'type' ? 'POST' : ''))),
+  await insertRows(db, 'posts', seed);
+  await insertRows(db, 'campaigns', [
+    { id: 'autumn', name: 'שיפוצי סתיו', status: 'active', start_date: addDays(today, -10), end_date: addDays(today, 30), goal: 'לידים לפני החגים', key_message: 'מסיימים לפני החורף', cta: 'שלחו הודעה', hashtags: '#שיפוצסתיו' },
   ]);
-  sheets.tabs.set('campaigns', [
-    ['id', 'name', 'status', 'start_date', 'end_date', 'goal', 'key_message', 'cta', 'hashtags'],
-    ['autumn', 'שיפוצי סתיו', 'active', addDays(today, -10), addDays(today, 30), 'לידים לפני החגים', 'מסיימים לפני החורף', 'שלחו הודעה', '#שיפוצסתיו'],
+  await insertRows(db, 'products', [
+    { id: 'kitchen', name: 'שיפוץ מטבח מלא', status: 'active', description: 'תכנון, פירוק, התקנה וגמר', price: 'החל מ-45,000 ₪' },
   ]);
-  sheets.tabs.set('products', [
-    ['id', 'name', 'status', 'description', 'price'],
-    ['kitchen', 'שיפוץ מטבח מלא', 'active', 'תכנון, פירוק, התקנה וגמר', 'החל מ-45,000 ₪'],
+  await insertRows(db, 'brand', [
+    { key: 'name', value: 'Reynovation' },
+    { key: 'voice', value: 'חם, מקצועי, בגובה העיניים' },
   ]);
-  sheets.tabs.set('brand', [['key', 'value'], ['name', 'Reynovation'], ['voice', 'חם, מקצועי, בגובה העיניים']]);
-  sheets.tabs.set('config', [['key', 'value'], ['cloudinary_cloud', 'demo'], ['cloudinary_preset', 'unsigned']]);
+  await insertRows(db, 'settings', [
+    { key: 'cloudinary_cloud', value: 'demo' },
+    { key: 'cloudinary_preset', value: 'unsigned' },
+  ]);
 
+  const store = new Store(db);
   const api = createApi({
-    store: () => new Store(sheets),
+    store: () => store,
     secrets: () => ({ sessionSecret: process.env.SESSION_SECRET!, apiToken: process.env.API_TOKEN }),
     password: () => process.env.APP_PASSWORD ?? 'dev',
   });

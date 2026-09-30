@@ -18,5 +18,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["src", "netlify", "tests", "vite.config.ts", "vitest.config.ts"]
+  "include": ["src", "netlify", "tests", "scripts/*.ts", "vite.config.ts", "vitest.config.ts"]
 }

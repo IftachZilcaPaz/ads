@@ -1,17 +1,8 @@
+import { UpstreamError } from './errors.ts';
 import type { TokenProvider } from './google-auth.ts';
 
 const API = 'https://sheets.googleapis.com/v4/spreadsheets';
 const RETRYABLE = new Set([429, 500, 502, 503, 504]);
-
-export class UpstreamError extends Error {
-  override name = 'UpstreamError';
-  constructor(
-    message: string,
-    readonly status: number,
-  ) {
-    super(message);
-  }
-}
 
 export interface CellUpdate {
   range: string;
@@ -68,7 +59,7 @@ export class SheetsClient implements SheetsPort {
     }
     if (!res.ok) {
       const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
-      throw new UpstreamError(`Google Sheets ${res.status}: ${body?.error?.message ?? res.statusText}`, res.status);
+      throw new UpstreamError(`Google Sheets ${res.status}: ${body?.error?.message ?? res.statusText}`);
     }
     return (await res.json()) as T;
   }

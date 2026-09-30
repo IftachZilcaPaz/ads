@@ -7,7 +7,7 @@ import { createDevBackend } from './src/server/dev-backend.ts';
 const DEV_PORT = Number(process.env.PORT) || 5199;
 
 /**
- * Serves /api/* from an in-memory backend inside the Vite dev server, so the
+ * Serves /api/* from an in-process Postgres (PGlite) backend inside the Vite dev server, so the
  * whole app runs with `npm run dev` on one port. Skipped under `netlify dev`,
  * where the real Netlify functions answer /api/*.
  */
@@ -15,9 +15,9 @@ function devBackend(): Plugin {
   return {
     name: 'bp-dev-backend',
     apply: 'serve',
-    configureServer(server) {
+    async configureServer(server) {
       if (process.env.NETLIFY_DEV) return;
-      const handle = createDevBackend();
+      const handle = await createDevBackend();
 
       server.middlewares.use(async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
         if (!req.url?.startsWith('/api/')) return next();

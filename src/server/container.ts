@@ -1,18 +1,14 @@
 import { createApi } from './api.ts';
+import { createPostgresDb } from './db/postgres.ts';
 import { readEnv, requireEnv } from './env.ts';
-import { ServiceAccountTokenProvider, parseServiceAccount } from './google-auth.ts';
 import type { AuthSecrets } from './session.ts';
-import { SheetsClient } from './sheets.ts';
 import { Store } from './store.ts';
 
-/** Lazily wired singletons: reused across invocations of a warm instance. */
+/** Lazily wired singleton: reused across invocations of a warm instance. */
 let store: Store | null = null;
 
 function getStore(): Store {
-  if (!store) {
-    const sa = parseServiceAccount(requireEnv('GOOGLE_SERVICE_ACCOUNT_JSON'));
-    store = new Store(new SheetsClient(requireEnv('SPREADSHEET_ID'), new ServiceAccountTokenProvider(sa)));
-  }
+  store ??= new Store(createPostgresDb(requireEnv('DATABASE_URL')));
   return store;
 }
 

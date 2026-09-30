@@ -15,7 +15,9 @@
     "check": "npm run typecheck && npm run test && npm run build",
     "n8n:build": "node scripts/build-n8n.mjs",
     "n8n:check": "node scripts/build-n8n.mjs --check",
-    "n8n:deploy": "node scripts/deploy-n8n.mjs"
+    "n8n:deploy": "node scripts/deploy-n8n.mjs",
+    "db:migrate": "node --experimental-transform-types --no-warnings scripts/db-migrate.ts",
+    "db:import-sheet": "node --experimental-transform-types --no-warnings scripts/import-sheet.ts"
   },
   "repository": {
     "type": "git",
@@ -23,10 +25,12 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.129.0",
+    "postgres": "^3.4.9",
     "preact": "^10.29.8",
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@netlify/edge-functions": "^4.0.0",
     "@netlify/functions": "^6.0.0",
     "@preact/preset-vite": "^2.10.6",
