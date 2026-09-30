@@ -1,3 +1,4 @@
+import { igImage } from '../src/shared/media.ts';
 import { execFileSync } from 'node:child_process';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadCode } from '../n8n/src/nodes.mjs';
@@ -174,6 +175,10 @@ describe('publish to instagram', () => {
     await run('publish-instagram.js', { json: { ...base, media_urls: 'https://res.cloudinary.com/demo/image/upload/v17/folder/tall.PNG' }, http });
     await run('publish-instagram.js', { json: { ...base, type: 'STORY' }, http });
     await run('publish-instagram.js', { json: { ...base, media_urls: 'https://cdn.example/x.jpg' }, http });
+    expect(sent.slice(0, 2)).toEqual([
+      igImage('https://res.cloudinary.com/demo/image/upload/v17/folder/tall.PNG'),
+      igImage(IMG, { feed: false }),
+    ]); // the app/CLI helper and the n8n code stay in sync
     expect(sent).toEqual([
       'https://res.cloudinary.com/demo/image/upload/if_ar_lt_0.8/c_pad,ar_4:5,b_auto/if_end/if_ar_gt_1.91/c_pad,ar_1.91,b_auto/if_end/c_limit,w_1440/q_auto:good/v17/folder/tall.jpg',
       'https://res.cloudinary.com/demo/image/upload/c_limit,w_1440/q_auto:good/v1/a.jpg',

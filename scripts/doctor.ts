@@ -6,7 +6,8 @@
 import { createClient } from '../n8n/src/deploy.mjs';
 import { WORKFLOWS } from '../n8n/src/workflows.mjs';
 import { createPostgresDb } from '../src/server/db/postgres.ts';
-import { isApproved, toPost, type Post } from '../src/shared/post.ts';
+import { igImage } from '../src/shared/media.ts';
+import { isApproved, isVideoUrl, mediaList, toPost, type Post } from '../src/shared/post.ts';
 import { databaseUrl, env } from './cli-env.ts';
 
 const REQUIRED_SETTINGS = ['access_token', 'ig_user_id', 'telegram_chat_id', 'app_url', 'app_api_token'];
@@ -48,6 +49,9 @@ async function checkDatabase(): Promise<void> {
     for (const p of posts) {
       console.log(`  • ${p.publish_at || '(no time)'}  ${p.id}  [${p.status}]  ${explain(p, now)}`);
       console.log(`      ${one(p.caption)}`);
+      if (p.status !== 'published') {
+        for (const u of mediaList(p).filter((m) => !isVideoUrl(m))) console.log(`      image as Instagram gets it: ${igImage(u, { feed: p.type !== 'STORY' })}`);
+      }
     }
 
     const settingRows = await db.query<{ key: string; value: string }>('select key, value from settings');
