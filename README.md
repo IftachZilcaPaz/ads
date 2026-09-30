@@ -4,7 +4,7 @@
 
 - **אפליקציה ב-Netlify**: לוח קנבן, יומן חודשי, סטודיו להעלאת תמונות וכתיבת קפשן, ניהול קמפיינים ומוצרים וקול המותג.
 - **n8n**: מפרסם בזמן, שולח בקשות אישור בטלגרם, מקבל תמונות מהבוט והופך אותן לטיוטות עם קפשן, ושולח בדיקה לילית.
-- **Google Sheets**: נשאר מקור האמת (אותו גיליון שכבר יש לך). האפליקציה מוסיפה בעצמה את העמודות והלשוניות החסרות.
+- **Postgres (Railway)**: מקור האמת. הפעולות הרגישות (נעילה לפרסום, אישור מטלגרם) הן פונקציות SQL אטומיות. הגיליון הישן מועבר פעם אחת עם `npm run db:import-sheet`.
 
 ## הכלל החשוב: שום דבר לא עולה בלי אישור
 
@@ -16,7 +16,7 @@
 | **פורסם** / **נכשל-נדחה** | היסטוריה, או משהו שדורש טיפול | — |
 
 - מאשרים בלוח (כפתור, גרירה או "אשר הכל") או בכפתור בטלגרם.
-- **אישור הוא על תוכן מסוים**: שינוי בקפשן, במדיה או בסוג מבטל את האישור (גם כשעורכים ישירות בגיליון). הזזת מועד לא מבטלת.
+- **אישור הוא על תוכן מסוים**: שינוי בקפשן, במדיה או בסוג מבטל את האישור. הזזת מועד לא מבטלת.
 - כפתור טלגרם ישן (אחרי עריכה, או כזה שכבר טופל) לא יעבוד. לחיצה כפולה לא תפרסם פעמיים.
 - "אישור קבוע" בפוסט = לפרסם בזמן בלי בקשה נפרדת. מיועד לתוכן שגרתי בלבד.
 
@@ -37,7 +37,7 @@ Claude מקבל: את התמונה, את **קול המותג** (לשונית "מ
 ```
         ┌──────────── Netlify ─────────────┐
  דפדפן ─┤  SPA (Preact, RTL)                │
-        │  /api/*        Node function ────┼──▶ Google Sheets  ◀── n8n (Publisher, Telegram Hub,
+        │  /api/*        Node function ────┼──▶ Postgres       ◀── n8n (Publisher, Telegram Hub,
         │  /api/captions Edge function ────┼──▶ Claude API           Watchdog, Token Refresh)
         └──────────────────────────────────┘                          │
  דפדפן ──────────── העלאה ישירה ──────────▶ Cloudinary ◀────────────┘──▶ Instagram Graph API
@@ -46,35 +46,38 @@ Claude מקבל: את התמונה, את **קול המותג** (לשונית "מ
 | תיקייה | מה יש בה |
 |---|---|
 | `src/shared/` | לוגיקת הדומיין המשותפת לשרת ולדפדפן: מחזור חיים של פוסט, אישורים, ולידציה של אינסטגרם, בניית הפרומפט |
-| `src/server/` | Sheets (service account ב-Web Crypto, בלי ספריות כבדות), סשן, ראוטר, שירות הקפשנים |
+| `src/server/` | ה-Store מעל Postgres (נעילת שורות), סשן, ראוטר, שירות הקפשנים, ייבוא הגיליון |
+| `db/migrations/` | הסכמה ופונקציות ה-SQL ש-n8n קורא להן (`claim_due_posts`, `request_approvals`, `decide_approval`...) |
 | `src/web/` | האפליקציה (Preact + Vite) |
 | `netlify/` | נקודות הכניסה: `functions/api.mts`, `edge-functions/captions.ts` |
 | `n8n/code/` | הקוד של כל Code node, כקבצי JS רגילים עם טסטים |
 | `n8n/src/` | הגדרות ה-workflows; `npm run n8n:build` מייצר JSON לייבוא |
-| `apps-script/` | הגנות בתוך הגיליון לעריכה ידנית |
 
 ## התקנה
 
 המדריך המלא, צעד אחר צעד: **[docs/setup.md](docs/setup.md)**. בקצרה:
 
-1. **Netlify**: Add new site → Import from GitHub → הריפו הזה. ההגדרות כבר ב-`netlify.toml`.
-2. **משתני סביבה** ב-Netlify לפי [`.env.example`](.env.example): `APP_PASSWORD`, `SESSION_SECRET`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `SPREADSHEET_ID`, `ANTHROPIC_API_KEY`, `API_TOKEN`.
-3. **הגיליון**: לשתף עם ה-`client_email` של ה-service account (Editor). בלשונית `config` להוסיף `app_url`, `app_api_token`, ואם רוצים `approval_lead_hours`.
-4. **n8n**: למלא ב-`.env` את `SPREADSHEET_ID`, `TELEGRAM_CHAT_ID`, `N8N_URL` ו-`N8N_API_KEY`, ולהריץ `npm run n8n:deploy`. הפקודה מעדכנת ומפעילה את כל ה-workflows דרך ה-API, בלי ייבוא ידני.
+1. **Railway**: שירות PostgreSQL (אזור EU West). את `DATABASE_PUBLIC_URL` מעתיקים ל-`.env` בשם `DATABASE_URL`.
+2. **מסד הנתונים**: `npm run db:import-sheet` יוצר את הסכמה ומעתיק את הגיליון, פעם אחת.
+3. **Netlify**: Import from GitHub, ומשתני סביבה לפי [`.env.example`](.env.example): `APP_PASSWORD`, `SESSION_SECRET`, `DATABASE_URL`, `ANTHROPIC_API_KEY`, `API_TOKEN`.
+4. **n8n**: credential מסוג Postgres, ואז `npm run n8n:deploy`. הפקודה מעדכנת ומפעילה את כל ה-workflows דרך ה-API.
 
 ## פיתוח
 
 ```bash
 npm install
-npm run dev       # הכול בפקודה אחת: http://localhost:5199 (סיסמה: dev), נתוני דוגמה בזיכרון, בלי Google
+npm run dev       # הכול בפקודה אחת: http://localhost:5199 (סיסמה: dev). Postgres מקומי בזיכרון (PGlite) עם נתוני דוגמה
 npm run check     # typecheck + טסטים + build
+npm run db:migrate  # מעדכן את הסכמה ב-DATABASE_URL
+TEST_DATABASE_URL=postgresql://... npx vitest run --no-file-parallelism  # הטסטים מול Postgres אמיתי
 npm run n8n:build # מייצר את ה-workflows מ-n8n/src
 npm run n8n:deploy -- --dry-run  # מה יתעדכן ב-n8n
 ```
 
 ## אבטחה
 
-- הריפו **ציבורי**: אין בו סודות. מזהה הגיליון ו-chat id מוזרקים רק ל-`n8n/dist/` (ב-gitignore). ה-token של Meta נשאר בגיליון ולא נחשף לדפדפן: ה-API מחזיר רק `cloudinary_cloud` ו-`cloudinary_preset`.
+- הריפו **ציבורי**: אין בו סודות. מזהה ה-credential ו-chat id מוזרקים רק ל-`n8n/dist/` (ב-gitignore) או ישר ל-n8n.
+- ה-token של Meta נמצא בטבלת `settings`, והאפליקציה לא מחזירה אותו לדפדפן: היא חושפת רק `cloudinary_cloud` ו-`cloudinary_preset`.
 - כניסה בסיסמה, עם cookie מסוג HttpOnly/Secure חתום ב-HMAC. יש בדיקת Origin לכתיבות, השהייה אחרי ניסיונות כושלים, ו-CSP קשוח.
-- כתיבה לגיליון היא `RAW`, כך שקפשן שמתחיל ב-`=` לא יהפוך לנוסחה ותאריך לא יומר לתא Date.
-- הבוט בטלגרם מגיב רק ל-`telegram_chat_id` שבגיליון.
+- כל ה-SQL עם פרמטרים, בלי שרשור מחרוזות, כולל ב-n8n. ה-DB אוכף ערכים חוקיים עם CHECK constraints.
+- הבוט בטלגרם מגיב רק ל-`telegram_chat_id` שבהגדרות.

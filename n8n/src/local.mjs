@@ -2,7 +2,7 @@
 // never be committed (the repo is public) into the rendered workflows.
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { OWNER_CHAT, SPREADSHEET } from './nodes.mjs';
+import { OWNER_CHAT, PG_CREDENTIAL } from './nodes.mjs';
 
 export function loadEnv(root) {
   const file = join(root, '.env');
@@ -20,8 +20,8 @@ export function loadEnv(root) {
 
 /** Placeholder → value, or throws listing what is missing. */
 export function localValues(env) {
-  const values = { [SPREADSHEET]: env.SPREADSHEET_ID, [OWNER_CHAT]: env.TELEGRAM_CHAT_ID };
-  const missing = [!env.SPREADSHEET_ID && 'SPREADSHEET_ID', !env.TELEGRAM_CHAT_ID && 'TELEGRAM_CHAT_ID'].filter(Boolean);
+  const values = { [PG_CREDENTIAL]: env.N8N_POSTGRES_CREDENTIAL_ID, [OWNER_CHAT]: env.TELEGRAM_CHAT_ID };
+  const missing = ['N8N_POSTGRES_CREDENTIAL_ID', 'TELEGRAM_CHAT_ID'].filter((k) => !env[k]);
   return { values, missing };
 }
 

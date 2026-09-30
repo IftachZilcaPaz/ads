@@ -11,7 +11,9 @@ const fromChat = str(cb ? cb.message && cb.message.chat && cb.message.chat.id : 
 if (!owner || fromChat !== owner) return [];
 
 if (cb) {
-  return [{ json: { kind: 'callback', data: str(cb.data), query_id: cb.id, chat_id: fromChat, message_id: cb.message.message_id } }];
+  // Buttons carry "action:id:ref" (old messages: "action:id").
+  const [action = '', id = '', ref = ''] = str(cb.data).split(':');
+  return [{ json: { kind: 'callback', action, id, ref, query_id: cb.id, chat_id: fromChat, message_id: cb.message.message_id } }];
 }
 
 const text = str(msg.caption || msg.text);

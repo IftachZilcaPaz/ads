@@ -17,7 +17,8 @@
     "n8n:check": "node scripts/build-n8n.mjs --check",
     "n8n:deploy": "node scripts/deploy-n8n.mjs",
     "db:migrate": "node --experimental-transform-types --no-warnings scripts/db-migrate.ts",
-    "db:import-sheet": "node --experimental-transform-types --no-warnings scripts/import-sheet.ts"
+    "db:import-sheet": "node --experimental-transform-types --no-warnings scripts/import-sheet.ts",
+    "db:set": "node --experimental-transform-types --no-warnings scripts/db-set.ts"
   },
   "repository": {
     "type": "git",

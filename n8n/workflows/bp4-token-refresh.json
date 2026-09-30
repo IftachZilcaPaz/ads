@@ -23,34 +23,24 @@
     },
     {
       "parameters": {
-        "authentication": "serviceAccount",
-        "documentId": {
-          "__rl": true,
-          "value": "__SPREADSHEET_ID__",
-          "mode": "id"
-        },
-        "sheetName": {
-          "__rl": true,
-          "value": "config",
-          "mode": "name"
-        },
+        "operation": "executeQuery",
+        "query": "select key, value from settings",
         "options": {}
       },
       "name": "Load Config",
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.5,
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
       "position": [
         224,
         0
       ],
       "credentials": {
-        "googleApi": {
-          "id": "uuI7RITinapm2k9h",
-          "name": "ReynovationSocial"
+        "postgres": {
+          "id": "__PG_CREDENTIAL_ID__",
+          "name": "BP Postgres"
         }
       },
       "executeOnce": true,
-      "alwaysOutputData": true,
       "id": "b836f80b-60ad-4556-a2b8-6fb32e947c6b"
     },
     {
@@ -116,65 +106,24 @@
     },
     {
       "parameters": {
-        "authentication": "serviceAccount",
-        "operation": "appendOrUpdate",
-        "documentId": {
-          "__rl": true,
-          "value": "__SPREADSHEET_ID__",
-          "mode": "id"
-        },
-        "sheetName": {
-          "__rl": true,
-          "value": "config",
-          "mode": "name"
-        },
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "key": "={{ $json.key }}",
-            "value": "={{ $json.value }}"
-          },
-          "matchingColumns": [
-            "key"
-          ],
-          "schema": [
-            {
-              "id": "key",
-              "displayName": "key",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "value",
-              "displayName": "value",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            }
-          ],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": false
-        },
+        "operation": "executeQuery",
+        "query": "insert into settings (key, value) values ($1, $2) on conflict (key) do update set value = excluded.value",
         "options": {
-          "cellFormat": "RAW"
+          "queryReplacement": "={{ [$json.key, $json.value] }}",
+          "queryBatching": "independently"
         }
       },
       "name": "Save Token",
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.5,
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
       "position": [
         1120,
         0
       ],
       "credentials": {
-        "googleApi": {
-          "id": "uuI7RITinapm2k9h",
-          "name": "ReynovationSocial"
+        "postgres": {
+          "id": "__PG_CREDENTIAL_ID__",
+          "name": "BP Postgres"
         }
       },
       "id": "d7951a1e-5edc-4dd5-a9a0-7d8d99c372c6"

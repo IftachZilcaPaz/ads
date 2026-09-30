@@ -7,11 +7,10 @@ const media = $('Route Update').first().json;
 const upload = $('Upload to Cloudinary').first().json;
 if (!upload.secure_url) throw new Error('Cloudinary did not return secure_url: ' + JSON.stringify(upload).slice(0, 200));
 
-const rows = (node) => $(node).all().map((i) => i.json);
-const campaigns = rows('Read Campaigns').filter((c) => str(c.id));
-const products = rows('Read Products').filter((p) => str(p.id));
-const brand = {};
-for (const r of rows('Read Brand')) if (str(r.key)) brand[str(r.key)] = str(r.value);
+const catalog = $('Read Catalog').first().json;
+const campaigns = catalog.campaigns || [];
+const products = catalog.products || [];
+const brand = catalog.brand || {};
 
 const text = media.text;
 const verbatim = text.startsWith('!');

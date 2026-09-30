@@ -42,15 +42,15 @@ function fakeN8n(existingIds: string[], { failActivate = [] as string[] } = {}) 
   return { store, calls, api: createClient({ baseUrl: 'https://n8n.example/', apiKey: 'key', fetchImpl }) };
 }
 
-const { values } = localValues({ SPREADSHEET_ID: 'SHEET123', TELEGRAM_CHAT_ID: '999' });
+const { values } = localValues({ N8N_POSTGRES_CREDENTIAL_ID: 'PGCRED123', TELEGRAM_CHAT_ID: '999' });
 const workflows = Object.fromEntries(Object.entries(WORKFLOWS).map(([k, wf]) => [k, localize(wf, values)]));
 const ids = Object.values(WORKFLOWS).map((w) => w.id);
 
 describe('n8n deploy', () => {
   it('injects private ids without leaving placeholders', () => {
     const text = JSON.stringify(workflows);
-    expect(text).not.toMatch(/__SPREADSHEET_ID__|__TELEGRAM_CHAT_ID__/);
-    expect(text).toContain('SHEET123');
+    expect(text).not.toMatch(/__PG_CREDENTIAL_ID__|__TELEGRAM_CHAT_ID__/);
+    expect(text).toContain('PGCRED123');
   });
 
   it('sends only the properties the public API accepts', () => {
@@ -69,7 +69,7 @@ describe('n8n deploy', () => {
     expect(backups).toHaveLength(5);
     expect(n8n.calls.filter((c) => c.startsWith('POST /workflows/') && c.endsWith('/activate'))).toHaveLength(4); // not BP5
     expect(n8n.store.get('EMES0elQDjPxhY6Z')!.nodes.length).toBe(WORKFLOWS['bp1-publisher']!.nodes.length);
-    expect(JSON.stringify(n8n.store.get('RbzKFcz4zIHRiJJl'))).toContain('SHEET123');
+    expect(JSON.stringify(n8n.store.get('RbzKFcz4zIHRiJJl'))).toContain('PGCRED123');
   });
 
   it('creates missing workflows and re-links them to the new error workflow', async () => {

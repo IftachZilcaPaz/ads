@@ -2,7 +2,7 @@
 /**
  * Renders n8n/src/workflows.mjs into importable JSON.
  *
- *   n8n/workflows/*.json  committed; contains __SPREADSHEET_ID__ / __TELEGRAM_CHAT_ID__ placeholders
+ *   n8n/workflows/*.json  committed; contains __PG_CREDENTIAL_ID__ / __TELEGRAM_CHAT_ID__ placeholders
  *   n8n/dist/*.json       git-ignored; placeholders replaced from env or .env — import these
  *
  * `--check` fails if the committed JSON is stale (used by tests/CI).

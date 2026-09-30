@@ -8,7 +8,7 @@
  *   npm run n8n:deploy -- --no-activate     update but leave activation to you
  *   npm run n8n:deploy -- --restore n8n/backups/<file>.json
  *
- * Needs in .env (or the environment): N8N_URL, N8N_API_KEY, SPREADSHEET_ID,
+ * Needs in .env (or the environment): N8N_URL, N8N_API_KEY, N8N_POSTGRES_CREDENTIAL_ID,
  * TELEGRAM_CHAT_ID. Every workflow that gets replaced is first saved to
  * n8n/backups/ (git-ignored).
  */

@@ -6,10 +6,8 @@ import {
   errorTrigger,
   http,
   ifEquals,
+  pg,
   schedule,
-  sheetAppend,
-  sheetRead,
-  sheetUpdate,
   tgAnswer,
   tgEdit,
   tgFile,
@@ -20,15 +18,19 @@ import {
 } from './nodes.mjs';
 
 const TZ = 'Asia/Jerusalem';
-const NOW = "={{ $now.setZone('Asia/Jerusalem').toFormat('yyyy-MM-dd HH:mm') }}";
 const approveButtons = (src) => [
   ['✅ אשר', `=approve:{{ ${src}.id }}:{{ ${src}.approval_ref }}`],
   ['❌ דחה', `=reject:{{ ${src}.id }}:{{ ${src}.approval_ref }}`],
 ];
 
+const LOAD_CONFIG = 'select key, value from settings';
+const SAVE_RESULT_SQL = 'select id, status from finish_publish($1, $2, $3, $4, $5)';
+const SAVE_RESULT_PARAMS = "={{ [$json.id, $json.status, $json.ig_media_id || '', $json.permalink || '', $json.error || ''] }}";
+
 // ---------------------------------------------------------------------------
-// BP 1 - Publisher: every 15 min. Publishes approved posts that are due; for
-// posts that still need approval, sends a Telegram request ahead of time.
+// BP 1 - Publisher: every 15 min. claim_due_posts() atomically locks approved,
+// due posts (nothing unapproved can be returned); request_approvals() marks
+// unapproved posts inside the lead window and gives each a one-time ref.
 // ---------------------------------------------------------------------------
 const publisher = workflow({
   name: 'BP 1 - Publisher',
@@ -36,76 +38,47 @@ const publisher = workflow({
   timezone: TZ,
   nodes: [
     schedule('Every 15 min', [0, 1], { field: 'minutes', minutesInterval: 15 }),
-    sheetRead('Load Config', [1, 1], 'config'),
-    sheetRead('Read Calendar', [2, 1], 'calendar'),
-    code('Plan', [3, 1], 'publisher-plan.js'),
-    ifEquals('Publish Now?', [4, 1], '={{ $json.route }}', 'publish'),
+    pg('Load Config', [1, 1], LOAD_CONFIG),
 
-    // Approved & due → claim (lock) → verify still approved → publish.
-    sheetUpdate('Claim Posts', [5, 0], 'calendar', {
-      id: '={{ $json.id }}',
-      status: 'publishing',
-      approval_ref: '=claim:{{ $execution.id }}',
-    }),
-    sheetRead('Re-read Calendar', [6, 0], 'calendar'),
-    code('Verify Claim', [7, 0], 'claim-verify.js'),
-    ifEquals('Still Approved?', [8, 0], '={{ String($json.claimed) }}', 'true'),
-    code('Publish to Instagram', [9, 0], 'publish-instagram.js', { perItem: true }),
-    sheetUpdate('Save Result', [10, 0], 'calendar', {
-      id: '={{ $json.id }}',
-      status: '={{ $json.status }}',
-      ig_media_id: '={{ $json.ig_media_id || "" }}',
-      permalink: '={{ $json.permalink || "" }}',
-      error: '={{ $json.error }}',
-      approval_ref: '',
-      updated_at: '={{ $json.updated_at }}',
-    }),
+    pg('Claim Due Posts', [2, 0], 'select * from claim_due_posts($1)', { params: "={{ ['claim:' + $execution.id] }}" }),
+    code('Prepare Publish', [3, 0], 'prepare-publish.js'),
+    code('Publish to Instagram', [4, 0], 'publish-instagram.js', { perItem: true, vars: { ITEM: '$json' } }),
+    pg('Save Result', [5, 0], SAVE_RESULT_SQL, { params: SAVE_RESULT_PARAMS, perItem: true }),
     tgMessage(
       'Notify Result',
-      [11, 0],
+      [6, 0],
       "={{ $('Publish to Instagram').item.json.telegram_chat_id }}",
       "={{ $('Publish to Instagram').item.json.status === 'published' ? '🎉 פורסם: ' + $('Publish to Instagram').item.json.id + ($('Publish to Instagram').item.json.permalink ? '\\n' + $('Publish to Instagram').item.json.permalink : '') : '🚨 פרסום נכשל: ' + $('Publish to Instagram').item.json.id + '\\n' + $('Publish to Instagram').item.json.error }}",
     ),
-    sheetUpdate('Release', [9, 1], 'calendar', { id: '={{ $json.id }}', status: 'ready', approval_ref: '' }),
 
-    // Not approved yet → mark pending → Telegram preview + approve/reject buttons.
-    sheetUpdate('Mark Pending', [5, 2], 'calendar', {
-      id: '={{ $json.id }}',
-      status: 'pending_approval',
-      approval_ref: '={{ $json.approval_ref }}',
-      error: '',
-    }),
+    pg('Request Approvals', [2, 2], 'select * from request_approvals()'),
+    code('Prepare Ask', [3, 2], 'prepare-ask.js'),
     tgPhoto(
       'Send Preview',
-      [6, 2],
-      "={{ $('Plan').item.json.telegram_chat_id }}",
-      "={{ $('Plan').item.json.preview_url }}",
-      "={{ $('Plan').item.json.id }}{{ $('Plan').item.json.media_count > 1 ? ' · ' + $('Plan').item.json.media_count + ' פריטים' : '' }}",
+      [4, 2],
+      "={{ $('Prepare Ask').item.json.telegram_chat_id }}",
+      "={{ $('Prepare Ask').item.json.preview_url }}",
+      "={{ $('Prepare Ask').item.json.id }}{{ $('Prepare Ask').item.json.media_count > 1 ? ' · ' + $('Prepare Ask').item.json.media_count + ' פריטים' : '' }}",
       { onError: 'continueRegularOutput' },
     ),
     tgMessage(
       'Ask Approval',
-      [7, 2],
-      "={{ $('Plan').item.json.telegram_chat_id }}",
-      "={{ ($('Plan').item.json.overdue ? '⏰ המועד עבר - יעלה מיד כשתאשר' : '🕑 מחכה לאישור שלך') + '\\n' + $('Plan').item.json.type + ' · ' + $('Plan').item.json.publish_at + ' · ' + $('Plan').item.json.id + '\\n\\n' + $('Plan').item.json.caption }}",
-      { buttons: approveButtons("$('Plan').item.json") },
+      [5, 2],
+      "={{ $('Prepare Ask').item.json.telegram_chat_id }}",
+      "={{ ($('Prepare Ask').item.json.overdue ? '⏰ המועד עבר - יעלה מיד כשתאשר' : '🕑 מחכה לאישור שלך') + '\\n' + $('Prepare Ask').item.json.type + ' · ' + $('Prepare Ask').item.json.publish_at + ' · ' + $('Prepare Ask').item.json.id + '\\n\\n' + $('Prepare Ask').item.json.caption }}",
+      { buttons: approveButtons("$('Prepare Ask').item.json") },
     ),
   ],
   links: [
     ['Every 15 min', 'Load Config'],
-    ['Load Config', 'Read Calendar'],
-    ['Read Calendar', 'Plan'],
-    ['Plan', 'Publish Now?'],
-    ['Publish Now?', 'Claim Posts', 0],
-    ['Publish Now?', 'Mark Pending', 1],
-    ['Claim Posts', 'Re-read Calendar'],
-    ['Re-read Calendar', 'Verify Claim'],
-    ['Verify Claim', 'Still Approved?'],
-    ['Still Approved?', 'Publish to Instagram', 0],
-    ['Still Approved?', 'Release', 1],
+    ['Load Config', 'Claim Due Posts'],
+    ['Load Config', 'Request Approvals'],
+    ['Claim Due Posts', 'Prepare Publish'],
+    ['Prepare Publish', 'Publish to Instagram'],
     ['Publish to Instagram', 'Save Result'],
     ['Save Result', 'Notify Result'],
-    ['Mark Pending', 'Send Preview'],
+    ['Request Approvals', 'Prepare Ask'],
+    ['Prepare Ask', 'Send Preview'],
     ['Send Preview', 'Ask Approval'],
   ],
 });
@@ -113,10 +86,14 @@ const publisher = workflow({
 // ---------------------------------------------------------------------------
 // BP 2 - Telegram Hub: approve/reject buttons, and photo/video → AI draft.
 // ---------------------------------------------------------------------------
-const decided = "$('Decide').first().json";
-const verified = "$('Verify Claim').first().json";
+const decided = "$('Decision').first().json";
 const published = "$('Publish to Instagram').first().json";
 const draft = "$('Make Draft').first().json";
+
+const CATALOG_SQL = `select
+  (select coalesce(jsonb_agg(to_jsonb(c)), '[]'::jsonb) from campaigns c where c.status <> 'ended') as campaigns,
+  (select coalesce(jsonb_agg(to_jsonb(p)), '[]'::jsonb) from products p where p.status = 'active') as products,
+  (select coalesce(jsonb_object_agg(key, value), '{}'::jsonb) from brand) as brand`;
 
 const telegramHub = workflow({
   name: 'BP 2 - Telegram Hub',
@@ -124,59 +101,25 @@ const telegramHub = workflow({
   timezone: TZ,
   nodes: [
     tgTrigger('Telegram Trigger', [0, 2], '63215956-13f4-4c3f-90a4-d747840135b1'),
-    sheetRead('Load Config', [1, 2], 'config'),
+    pg('Load Config', [1, 2], LOAD_CONFIG),
     code('Route Update', [2, 2], 'telegram-route.js'),
     ifEquals('Is Button?', [3, 2], '={{ $json.kind }}', 'callback'),
 
-    // ----- approve / reject buttons -----
-    sheetRead('Read Calendar', [4, 0], 'calendar'),
-    code('Decide', [5, 0], 'callback-decide.js'),
+    // ----- approve / reject buttons (decide_approval is atomic and stale-safe) -----
+    pg('Decide', [4, 0], 'select decide_approval($1, $2, $3) as result', { params: '={{ [$json.id, $json.ref, $json.action] }}' }),
+    code('Decision', [5, 0], 'callback-decision.js'),
     tgAnswer('Answer Button', [6, 0], `={{ ${decided}.query_id }}`, `={{ ${decided}.answer }}`),
-    ifEquals('Stale?', [7, 0], `={{ ${decided}.decision }}`, 'stale'),
-    tgEdit('Edit (Stale)', [8, 1], `={{ ${decided}.chat_id }}`, `={{ ${decided}.message_id }}`, `={{ ${decided}.edit_text }}`),
-    sheetUpdate('Claim', [8, 0], 'calendar', {
-      id: `={{ ${decided}.id }}`,
-      status: `={{ ${decided}.decision === 'publish_now' ? 'publishing' : ${decided}.status }}`,
-      approval_ref: '=claim:{{ $execution.id }}',
-    }),
-    sheetRead('Re-read Calendar', [9, 0], 'calendar'),
-    code('Verify Claim', [10, 0], 'callback-verify.js'),
-    ifEquals('Publish Now?', [11, 0], '={{ $json.decision }}', 'publish_now'),
-    code('Publish to Instagram', [12, 0], 'publish-instagram.js', { perItem: true }),
-    sheetUpdate('Save Result', [13, 0], 'calendar', {
-      id: '={{ $json.id }}',
-      status: '={{ $json.status }}',
-      approved_at: '={{ $json.approved_at }}',
-      ig_media_id: '={{ $json.ig_media_id || "" }}',
-      permalink: '={{ $json.permalink || "" }}',
-      error: '={{ $json.error }}',
-      approval_ref: '',
-      updated_at: '={{ $json.updated_at }}',
-    }),
+    ifEquals('Publish Now?', [7, 0], `={{ ${decided}.decision }}`, 'publish_now'),
+    code('Publish to Instagram', [8, 0], 'publish-instagram.js', { perItem: true, vars: { ITEM: decided } }),
+    pg('Save Result', [9, 0], SAVE_RESULT_SQL, { params: SAVE_RESULT_PARAMS, perItem: true }),
     tgEdit(
       'Edit (Published)',
-      [14, 0],
-      `={{ ${verified}.chat_id }}`,
-      `={{ ${verified}.message_id }}`,
+      [10, 0],
+      `={{ ${decided}.chat_id }}`,
+      `={{ ${decided}.message_id }}`,
       `={{ ${published}.status === 'published' ? '🎉 ' + ${published}.id + ' פורסם' + (${published}.permalink ? '\\n' + ${published}.permalink : '') : '🚨 ' + ${published}.id + ' נכשל: ' + ${published}.error }}`,
     ),
-    ifEquals('Approve Later?', [12, 1], '={{ $json.decision }}', 'approve_later'),
-    sheetUpdate('Save Approval', [13, 1], 'calendar', {
-      id: '={{ $json.id }}',
-      status: 'ready',
-      approved_at: '={{ $json.approved_at }}',
-      approval_ref: '',
-      error: '',
-      updated_at: NOW,
-    }),
-    ifEquals('Reject?', [13, 2], '={{ $json.decision }}', 'reject'),
-    sheetUpdate('Save Rejection', [14, 2], 'calendar', {
-      id: '={{ $json.id }}',
-      status: 'rejected',
-      approval_ref: '',
-      updated_at: NOW,
-    }),
-    tgEdit('Edit (Done)', [15, 1], `={{ ${verified}.chat_id }}`, `={{ ${verified}.message_id }}`, `={{ ${verified}.edit_text }}`),
+    tgEdit('Edit (Done)', [8, 1], `={{ ${decided}.chat_id }}`, `={{ ${decided}.message_id }}`, `={{ ${decided}.edit_text }}`),
 
     // ----- photo / video → Cloudinary → AI caption → draft -----
     ifEquals('Is Media?', [4, 3], '={{ $json.kind }}', 'media'),
@@ -194,14 +137,12 @@ const telegramHub = workflow({
       },
       options: {},
     }),
-    sheetRead('Read Campaigns', [7, 3], 'campaigns'),
-    sheetRead('Read Products', [8, 3], 'products'),
-    sheetRead('Read Brand', [9, 3], 'brand'),
-    code('Build Caption Request', [10, 3], 'intake-request.js'),
-    ifEquals('Use AI?', [11, 3], '={{ String($json.use_ai) }}', 'true'),
+    pg('Read Catalog', [7, 3], CATALOG_SQL),
+    code('Build Caption Request', [8, 3], 'intake-request.js'),
+    ifEquals('Use AI?', [9, 3], '={{ String($json.use_ai) }}', 'true'),
     http(
       'Write Caption (AI)',
-      [12, 3],
+      [10, 3],
       {
         method: 'POST',
         url: '={{ $json.app_url }}/api/captions',
@@ -214,23 +155,11 @@ const telegramHub = workflow({
       },
       { onError: 'continueRegularOutput' },
     ),
-    code('Make Draft', [13, 4], 'intake-draft.js'),
-    sheetAppend('Append Draft', [14, 4], 'calendar', {
-      id: '={{ $json.id }}',
-      type: '={{ $json.type }}',
-      media_urls: '={{ $json.media_urls }}',
-      caption: '={{ $json.caption }}',
-      approval_mode: 'approve',
-      status: 'draft',
-      campaign_id: '={{ $json.campaign_id }}',
-      product_id: '={{ $json.product_id }}',
-      notes: '={{ $json.notes }}',
-      created_at: '={{ $json.created_at }}',
-      updated_at: '={{ $json.updated_at }}',
-    }),
+    code('Make Draft', [11, 4], 'intake-draft.js'),
+    pg('Insert Draft', [12, 4], 'select id from insert_draft($1)', { params: '={{ [JSON.stringify($json)] }}' }),
     tgMessage(
       'Confirm Draft',
-      [15, 4],
+      [13, 4],
       `={{ ${draft}.chat_id }}`,
       `={{ ('📝 נוצרה טיוטה ' + ${draft}.id + '\\n' + (${draft}.ai_used ? '✨ קפשן מה-AI:' : (${draft}.ai_error ? '⚠️ ה-AI לא זמין (' + ${draft}.ai_error + ') - שמרתי את הטקסט שלך:' : 'הקפשן:')) + '\\n\\n' + (${draft}.caption || '(ריק)') + (${draft}.alternatives ? '\\n\\nגרסאות נוספות:\\n' + ${draft}.alternatives : '') + (${draft}.app_url ? '\\n\\nלקביעת מועד ואישור: ' + ${draft}.app_url : '')).slice(0, 4000) }}`,
     ),
@@ -245,39 +174,26 @@ const telegramHub = workflow({
     ['Telegram Trigger', 'Load Config'],
     ['Load Config', 'Route Update'],
     ['Route Update', 'Is Button?'],
-    ['Is Button?', 'Read Calendar', 0],
+    ['Is Button?', 'Decide', 0],
     ['Is Button?', 'Is Media?', 1],
-    ['Read Calendar', 'Decide'],
-    ['Decide', 'Answer Button'],
-    ['Answer Button', 'Stale?'],
-    ['Stale?', 'Edit (Stale)', 0],
-    ['Stale?', 'Claim', 1],
-    ['Claim', 'Re-read Calendar'],
-    ['Re-read Calendar', 'Verify Claim'],
-    ['Verify Claim', 'Publish Now?'],
+    ['Decide', 'Decision'],
+    ['Decision', 'Answer Button'],
+    ['Answer Button', 'Publish Now?'],
     ['Publish Now?', 'Publish to Instagram', 0],
-    ['Publish Now?', 'Approve Later?', 1],
+    ['Publish Now?', 'Edit (Done)', 1],
     ['Publish to Instagram', 'Save Result'],
     ['Save Result', 'Edit (Published)'],
-    ['Approve Later?', 'Save Approval', 0],
-    ['Approve Later?', 'Reject?', 1],
-    ['Save Approval', 'Edit (Done)'],
-    ['Reject?', 'Save Rejection', 0],
-    ['Reject?', 'Edit (Done)', 1],
-    ['Save Rejection', 'Edit (Done)'],
     ['Is Media?', 'Get File', 0],
     ['Is Media?', 'Usage Hint', 1],
     ['Get File', 'Upload to Cloudinary'],
-    ['Upload to Cloudinary', 'Read Campaigns'],
-    ['Read Campaigns', 'Read Products'],
-    ['Read Products', 'Read Brand'],
-    ['Read Brand', 'Build Caption Request'],
+    ['Upload to Cloudinary', 'Read Catalog'],
+    ['Read Catalog', 'Build Caption Request'],
     ['Build Caption Request', 'Use AI?'],
     ['Use AI?', 'Write Caption (AI)', 0],
     ['Use AI?', 'Make Draft', 1],
     ['Write Caption (AI)', 'Make Draft'],
-    ['Make Draft', 'Append Draft'],
-    ['Append Draft', 'Confirm Draft'],
+    ['Make Draft', 'Insert Draft'],
+    ['Insert Draft', 'Confirm Draft'],
   ],
 });
 
@@ -290,8 +206,8 @@ const watchdog = workflow({
   timezone: TZ,
   nodes: [
     schedule('Daily 20:30', [0, 0], { field: 'cronExpression', expression: '30 20 * * *' }),
-    sheetRead('Load Config', [1, 0], 'config'),
-    sheetRead('Read Calendar', [2, 0], 'calendar'),
+    pg('Load Config', [1, 0], LOAD_CONFIG),
+    pg('Read Calendar', [2, 0], "select * from posts where status in ('ready', 'pending_approval', 'publishing', 'failed')"),
     code('Check', [3, 0], 'watchdog.js'),
     tgMessage('Alert', [4, 0], '={{ $json.telegram_chat_id }}', '={{ $json.text }}'),
   ],
@@ -312,7 +228,7 @@ const tokenRefresh = workflow({
   timezone: TZ,
   nodes: [
     schedule('Twice a Month', [0, 0], { field: 'cronExpression', expression: '0 3 1,15 * *' }),
-    sheetRead('Load Config', [1, 0], 'config'),
+    pg('Load Config', [1, 0], LOAD_CONFIG),
     code('Prep', [2, 0], 'config-json.js'),
     http('Exchange Token', [3, 0], {
       url: 'https://graph.facebook.com/v26.0/oauth/access_token',
@@ -328,7 +244,10 @@ const tokenRefresh = workflow({
       options: {},
     }),
     code('Token Rows', [4, 0], 'token-rows.js'),
-    sheetUpdate('Save Token', [5, 0], 'config', { key: '={{ $json.key }}', value: '={{ $json.value }}' }, { match: 'key', upsert: true }),
+    pg('Save Token', [5, 0], 'insert into settings (key, value) values ($1, $2) on conflict (key) do update set value = excluded.value', {
+      params: '={{ [$json.key, $json.value] }}',
+      perItem: true,
+    }),
     tgMessage(
       'Notify',
       [6, 0],

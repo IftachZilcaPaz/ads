@@ -6,12 +6,12 @@ import { fileURLToPath } from 'node:url';
 
 const CODE_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'code');
 
-export const SPREADSHEET = '__SPREADSHEET_ID__';
+export const PG_CREDENTIAL = '__PG_CREDENTIAL_ID__';
 export const OWNER_CHAT = '__TELEGRAM_CHAT_ID__';
 export const ERROR_WORKFLOW_ID = 'cPELz1Hlnup9oEir';
 
 // Credential *references* (names/ids inside your n8n), not secrets.
-const GOOGLE = { googleApi: { id: 'uuI7RITinapm2k9h', name: 'ReynovationSocial' } };
+const POSTGRES = { postgres: { id: PG_CREDENTIAL, name: 'BP Postgres' } };
 const TELEGRAM = { telegramApi: { id: 'gQQT4wEAXLPFc22J', name: 'ReynovationSocial' } };
 
 /** Deterministic UUID so rebuilding produces identical JSON (clean diffs). */
@@ -45,74 +45,26 @@ export const code = (name, pos, file, { perItem = false, vars } = {}) =>
     jsCode: loadCode(file, vars),
   });
 
-const doc = { __rl: true, value: SPREADSHEET, mode: 'id' };
-const tab = (name) => ({ __rl: true, value: name, mode: 'name' });
-
-export const sheetRead = (name, pos, tabName, { once = true } = {}) =>
-  node(
-    name,
-    'n8n-nodes-base.googleSheets',
-    4.5,
-    pos,
-    { authentication: 'serviceAccount', documentId: doc, sheetName: tab(tabName), options: {} },
-    { credentials: GOOGLE, ...(once ? { executeOnce: true } : {}), alwaysOutputData: true },
-  );
-
-function columns(values, matching) {
-  return {
-    mappingMode: 'defineBelow',
-    value: values,
-    matchingColumns: matching,
-    schema: Object.keys(values).map((id) => ({
-      id,
-      displayName: id,
-      required: false,
-      defaultMatch: false,
-      display: true,
-      type: 'string',
-      canBeUsedToMatch: true,
-    })),
-    attemptToConvertTypes: false,
-    convertFieldsToString: false,
-  };
-}
-
 /**
- * Updates existing rows only (never appends a stray row if the id vanished).
- * RAW keeps "2026-09-01 18:30" as text instead of a locale-dependent date cell.
+ * Runs SQL against the app database. `params` is an n8n expression that
+ * evaluates to an array (safe for values containing commas or quotes).
+ * `perItem` runs once per input item; otherwise the node runs once.
  */
-export const sheetUpdate = (name, pos, tabName, values, { match = 'id', upsert = false } = {}) =>
+export const pg = (name, pos, query, { params, perItem = false } = {}) =>
   node(
     name,
-    'n8n-nodes-base.googleSheets',
-    4.5,
+    'n8n-nodes-base.postgres',
+    2.5,
     pos,
     {
-      authentication: 'serviceAccount',
-      operation: upsert ? 'appendOrUpdate' : 'update',
-      documentId: doc,
-      sheetName: tab(tabName),
-      columns: columns(values, [match]),
-      options: { cellFormat: 'RAW' },
+      operation: 'executeQuery',
+      query,
+      options: {
+        ...(params ? { queryReplacement: params } : {}),
+        ...(perItem ? { queryBatching: 'independently' } : {}),
+      },
     },
-    { credentials: GOOGLE },
-  );
-
-export const sheetAppend = (name, pos, tabName, values) =>
-  node(
-    name,
-    'n8n-nodes-base.googleSheets',
-    4.5,
-    pos,
-    {
-      authentication: 'serviceAccount',
-      operation: 'append',
-      documentId: doc,
-      sheetName: tab(tabName),
-      columns: columns(values, []),
-      options: { cellFormat: 'RAW' },
-    },
-    { credentials: GOOGLE },
+    { credentials: POSTGRES, ...(perItem ? {} : { executeOnce: true }) },
   );
 
 /** String equality IF node; output 0 = true, 1 = false. */

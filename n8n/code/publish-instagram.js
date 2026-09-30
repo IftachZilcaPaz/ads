@@ -1,7 +1,7 @@
 // @include _common.js
 // Publishes ONE item to Instagram via the Graph API. Never throws: returns
 // status "published" or "failed" with Meta's real error message.
-const j = $json;
+const j = @@ITEM@@;
 const token = j.access_token;
 const igId = j.ig_user_id;
 const G = 'https://graph.facebook.com/v26.0';

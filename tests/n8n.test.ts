@@ -8,6 +8,7 @@ const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (
 
 interface Ctx {
   nodes?: Record<string, Json[]>;
+  input?: Json[];
   json?: Json;
   executionId?: string;
   http?: (req: { method: string; url: string; qs: Json }) => unknown;
@@ -15,18 +16,19 @@ interface Ctx {
 
 /** Executes a code-node source the way n8n does ($, $json, this.helpers...). */
 async function run(file: string, ctx: Ctx = {}): Promise<Json[]> {
-  const src = loadCode(file);
+  const src = loadCode(file, { ITEM: '$json' });
   const $ = (name: string) => {
     const rows = ctx.nodes?.[name];
     if (!rows) throw new Error(`Node '${name}' not provided`);
     const items = rows.map((json) => ({ json }));
     return { all: () => items, first: () => items[0], item: items[0] };
   };
-  const fn = new AsyncFunction('$', '$json', '$execution', src);
+  const fn = new AsyncFunction('$', '$input', '$json', '$execution', src);
   const helpers = {
     httpRequest: async (req: { method: string; url: string; qs: Json }) => ({ statusCode: 200, body: ctx.http!(req) }),
   };
-  const out = await fn.call({ helpers }, $, ctx.json, { id: ctx.executionId ?? '42' });
+  const $input = { all: () => (ctx.input ?? []).map((json) => ({ json })) };
+  const out = await fn.call({ helpers }, $, $input, ctx.json, { id: ctx.executionId ?? '42' });
   const list = (Array.isArray(out) ? out : [out]) as { json: Json }[];
   return list.map((i) => i.json);
 }
@@ -60,63 +62,19 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-describe('publisher plan', () => {
-  const plan = (rows: Json[], config = CONFIG) => run('publisher-plan.js', { nodes: { 'Load Config': config, 'Read Calendar': rows } });
-
-  it('publishes only approved posts that are due', async () => {
-    const out = await plan([
-      row({ id: 'approved-due', approved_at: '2026-09-28 10:00' }),
-      row({ id: 'auto-due', approval_mode: 'auto' }),
-      row({ id: 'approved-future', approved_at: 'x', publish_at: '2026-09-29 12:30' }),
-      row({ id: 'draft', status: 'draft', approved_at: 'x' }),
-      row({ id: 'published', status: 'published', approved_at: 'x' }),
-      row({ id: 'bad-date', approved_at: 'x', publish_at: '29/09/2026' }),
-    ]);
-    const publish = out.filter((o) => o.route === 'publish').map((o) => o.id);
-    expect(publish).toEqual(['approved-due', 'auto-due']);
-    expect(out[0]).toMatchObject({ caption: 'hello - world', access_token: 'TOKEN', ig_user_id: '1789' });
+describe('publisher preparation', () => {
+  it('attaches Meta credentials to claimed rows', async () => {
+    const out = await run('prepare-publish.js', { nodes: { 'Load Config': CONFIG }, input: [row({ status: 'publishing' })] });
+    expect(out[0]).toMatchObject({ id: 'p1', caption: 'hello - world', access_token: 'TOKEN', ig_user_id: '1789', telegram_chat_id: '356' });
   });
 
-  it('never publishes unapproved posts; asks for approval ahead of time', async () => {
-    const out = await plan([
-      row({ id: 'due-unapproved' }),
-      row({ id: 'tonight', publish_at: '2026-09-29 21:00' }),
-      row({ id: 'next-week', publish_at: '2026-10-06 21:00' }),
-      row({ id: 'already-asked', status: 'pending_approval' }),
-    ]);
-    expect(out.every((o) => o.route === 'ask')).toBe(true);
-    expect(out.map((o) => o.id)).toEqual(['due-unapproved', 'tonight']);
-    expect(out[0]).toMatchObject({ overdue: true, preview_url: expect.stringContaining('/w_1080,c_limit') });
-    expect(String(out[0]!.approval_ref)).toMatch(/^[a-z0-9]{4,6}$/);
-  });
-
-  it('respects approval_lead_hours from config', async () => {
-    const out = await plan([row({ id: 'tonight', publish_at: '2026-09-29 21:00' })], [...CONFIG, { key: 'approval_lead_hours', value: '2' }]);
-    expect(out).toEqual([]);
-  });
-});
-
-describe('publisher claim verification', () => {
-  const verify = (claimed: Json[], fresh: Json[]) =>
-    run('claim-verify.js', {
-      executionId: '77',
-      nodes: { 'Load Config': CONFIG, 'Claim Posts': claimed, 'Re-read Calendar': fresh },
+  it('builds approval requests with a preview still and overdue flag', async () => {
+    const out = await run('prepare-ask.js', {
+      nodes: { 'Load Config': CONFIG },
+      input: [row({ status: 'pending_approval', approval_ref: 'abc123' }), row({ id: 'p2', publish_at: '2026-09-30 19:00', media_urls: `${IMG},${IMG}` })],
     });
-
-  it('publishes only rows this execution still owns and that are still approved', async () => {
-    const out = await verify(
-      [{ id: 'a' }, { id: 'b' }, { id: 'c' }],
-      [
-        row({ id: 'a', status: 'publishing', approval_ref: 'claim:77', approved_at: 'x' }),
-        row({ id: 'b', status: 'publishing', approval_ref: 'claim:77', approved_at: '' }),
-        row({ id: 'c', status: 'publishing', approval_ref: 'claim:99', approved_at: 'x' }),
-      ],
-    );
-    expect(out.map((o) => [o.id, o.claimed])).toEqual([
-      ['a', true],
-      ['b', false], // approval withdrawn → release back to ready
-    ]);
-    expect(out[0]).toMatchObject({ access_token: 'TOKEN', telegram_chat_id: '356' });
+    expect(out[0]).toMatchObject({ overdue: true, media_count: 1, telegram_chat_id: '356', preview_url: expect.stringContaining('/w_1080,c_limit') });
+    expect(out[1]).toMatchObject({ overdue: false, media_count: 2 });
   });
 });
 
@@ -130,8 +88,10 @@ describe('telegram routing', () => {
 
   it('classifies buttons, media and text', async () => {
     expect(await route({ callback_query: { id: 'q', data: 'approve:p1:r', message: { chat: { id: 356 }, message_id: 5 } } })).toEqual([
-      { kind: 'callback', data: 'approve:p1:r', query_id: 'q', chat_id: '356', message_id: 5 },
+      { kind: 'callback', action: 'approve', id: 'p1', ref: 'r', query_id: 'q', chat_id: '356', message_id: 5 },
     ]);
+    const [legacy] = await route({ callback_query: { id: 'q', data: 'reject:p9', message: { chat: { id: 356 }, message_id: 5 } } });
+    expect(legacy).toMatchObject({ action: 'reject', id: 'p9', ref: '' });
     const [photo] = await route({ message: { chat: { id: 356 }, caption: '#winter', photo: [{ file_id: 'small' }, { file_id: 'big' }] } });
     expect(photo).toMatchObject({ kind: 'media', file_id: 'big', is_video: false, text: '#winter', cloudinary_cloud: 'demo' });
     const [doc] = await route({ message: { chat: { id: 356 }, document: { file_id: 'd', mime_type: 'video/mp4' } } });
@@ -142,37 +102,33 @@ describe('telegram routing', () => {
 });
 
 describe('approval buttons', () => {
-  const decide = (data: string, rows: Json[]) =>
-    run('callback-decide.js', {
-      nodes: { 'Route Update': [{ data, query_id: 'q', chat_id: '356', message_id: 9 }], 'Read Calendar': rows },
+  const decision = (result: Json) =>
+    run('callback-decision.js', {
+      nodes: {
+        'Load Config': CONFIG,
+        'Route Update': [{ id: 'p1', query_id: 'q', chat_id: '356', message_id: 9 }],
+        Decide: [{ result }],
+      },
     });
 
-  it('rejects stale buttons (wrong ref, handled, or missing post)', async () => {
-    expect((await decide('approve:p1:old', [row({ status: 'pending_approval', approval_ref: 'new' })]))[0]!.decision).toBe('stale');
-    expect((await decide('approve:p1:r', [row({ status: 'ready', approval_ref: 'r' })]))[0]!.decision).toBe('stale');
-    expect((await decide('approve:nope:r', []))[0]!.decision).toBe('stale');
+  it('turns decide_approval results into Telegram texts', async () => {
+    expect((await decision({ ...row({}), decision: 'approve_later', publish_at: '2026-10-01 19:00' }))[0]).toMatchObject({
+      decision: 'approve_later',
+      answer: 'מאושר ✅',
+      edit_text: '✅ p1 אושר ויעלה ב-2026-10-01 19:00',
+      message_id: 9,
+    });
+    expect((await decision({ ...row({}), decision: 'reject' }))[0]!.edit_text).toContain('נדחה');
   });
 
-  it('approves for later, publishes now when overdue, or rejects', async () => {
-    const future = row({ status: 'pending_approval', approval_ref: 'r', publish_at: '2026-09-30 19:00' });
-    expect((await decide('approve:p1:r', [future]))[0]).toMatchObject({ decision: 'approve_later', approved_at: '2026-09-29 12:00' });
-    const overdue = row({ status: 'pending_approval', approval_ref: 'r' });
-    expect((await decide('approve:p1:r', [overdue]))[0]!.decision).toBe('publish_now');
-    expect((await decide('reject:p1:r', [overdue]))[0]!.decision).toBe('reject');
-  });
-
-  it('still accepts buttons sent by the old workflow (no ref)', async () => {
-    expect((await decide('approve:p1', [row({ status: 'pending_approval' })]))[0]!.decision).toBe('publish_now');
-  });
-
-  it('verifies the claim before acting (double taps)', async () => {
-    const nodes = {
-      'Load Config': CONFIG,
-      Decide: [{ id: 'p1', decision: 'publish_now', edit_text: 'ok' }],
-      'Re-read Calendar': [row({ approval_ref: 'claim:1' })],
-    };
-    expect((await run('callback-verify.js', { executionId: '2', nodes }))[0]!.decision).toBe('stale');
-    expect((await run('callback-verify.js', { executionId: '1', nodes }))[0]).toMatchObject({ decision: 'publish_now', access_token: 'TOKEN' });
+  it('carries credentials for publish_now; unknown results are stale', async () => {
+    expect((await decision({ ...row({ status: 'publishing' }), decision: 'publish_now' }))[0]).toMatchObject({
+      decision: 'publish_now',
+      access_token: 'TOKEN',
+      caption: 'hello - world',
+    });
+    expect((await decision({ decision: 'stale', reason: 'missing', id: 'p1' }))[0]).toMatchObject({ decision: 'stale', answer: 'הבקשה הזאת כבר לא בתוקף' });
+    expect((await decision({}))[0]!.decision).toBe('stale');
   });
 });
 
@@ -215,9 +171,9 @@ describe('telegram media intake', () => {
     'Load Config': config,
     'Route Update': [{ kind: 'media', text, is_video: false, chat_id: '356' }],
     'Upload to Cloudinary': [{ secure_url: IMG }],
-    'Read Campaigns': [{ id: 'winter', name: 'חורף', key_message: 'חם' }],
-    'Read Products': [{ id: 'kitchen', name: 'מטבח' }],
-    'Read Brand': [{ key: 'voice', value: 'חם' }],
+    'Read Catalog': [
+      { campaigns: [{ id: 'winter', name: 'חורף', key_message: 'חם' }], products: [{ id: 'kitchen', name: 'מטבח' }], brand: { voice: 'חם' } },
+    ],
   });
 
   it('matches #tags to campaign/product and uses the rest as the AI brief', async () => {
@@ -291,12 +247,13 @@ describe('workflow definitions', () => {
     }
   });
 
-  it('writes to Sheets as RAW text and routes failures to the error workflow', () => {
+  it('talks to Postgres only (no Sheets) and routes failures to the error workflow', () => {
     for (const wf of Object.values(WORKFLOWS)) {
       for (const n of wf.nodes) {
-        const op = (n.parameters as { operation?: string }).operation;
-        if (n.type === 'n8n-nodes-base.googleSheets' && op) {
-          expect((n.parameters as { options: Json }).options, `${wf.name}/${n.name}`).toMatchObject({ cellFormat: 'RAW' });
+        expect(n.type, `${wf.name}/${n.name}`).not.toBe('n8n-nodes-base.googleSheets');
+        if (n.type === 'n8n-nodes-base.postgres') {
+          expect(n.credentials).toEqual({ postgres: { id: '__PG_CREDENTIAL_ID__', name: 'BP Postgres' } });
+          expect(String(n.parameters.query)).not.toMatch(/\$\{|\{\{/); // values go through parameters, never string interpolation
         }
       }
       if (wf.id !== 'cPELz1Hlnup9oEir') expect(wf.settings.errorWorkflow).toBe('cPELz1Hlnup9oEir');
