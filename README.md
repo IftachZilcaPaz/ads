@@ -69,6 +69,7 @@ npm install
 npm run dev       # הכול בפקודה אחת: http://localhost:5199 (סיסמה: dev). Postgres מקומי בזיכרון (PGlite) עם נתוני דוגמה
 npm run check     # typecheck + טסטים + build
 npm run db:migrate  # מעדכן את הסכמה ב-DATABASE_URL
+npm run doctor    # למה פוסט לא עלה: מצב הפוסטים, הגדרות חסרות, ריצות ושגיאות אחרונות ב-n8n
 TEST_DATABASE_URL=postgresql://... npx vitest run --no-file-parallelism  # הטסטים מול Postgres אמיתי
 npm run n8n:build # מייצר את ה-workflows מ-n8n/src
 npm run n8n:deploy -- --dry-run  # מה יתעדכן ב-n8n

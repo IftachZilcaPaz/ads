@@ -19,7 +19,8 @@
     "db:migrate": "node --experimental-transform-types --no-warnings scripts/db-migrate.ts",
     "db:import-sheet": "node --experimental-transform-types --no-warnings scripts/import-sheet.ts",
     "db:set": "node --experimental-transform-types --no-warnings scripts/db-set.ts",
-    "db:overdue": "node --experimental-transform-types --no-warnings scripts/db-overdue.ts"
+    "db:overdue": "node --experimental-transform-types --no-warnings scripts/db-overdue.ts",
+    "doctor": "node --experimental-transform-types --no-warnings scripts/doctor.ts"
   },
   "repository": {
     "type": "git",
