@@ -94,11 +94,25 @@ describe('telegram routing', () => {
     const [legacy] = await route({ callback_query: { id: 'q', data: 'reject:p9', message: { chat: { id: 356 }, message_id: 5 } } });
     expect(legacy).toMatchObject({ action: 'reject', id: 'p9', ref: '' });
     const [photo] = await route({ message: { chat: { id: 356 }, caption: '#winter', photo: [{ file_id: 'small' }, { file_id: 'big' }] } });
-    expect(photo).toMatchObject({ kind: 'media', file_id: 'big', is_video: false, text: '#winter', cloudinary_cloud: 'demo' });
+    expect(photo).toMatchObject({ kind: 'media', file_id: 'big', is_video: false, text: '#winter', cloudinary_cloud: 'demo', chat_id: '356' });
     const [doc] = await route({ message: { chat: { id: 356 }, document: { file_id: 'd', mime_type: 'video/mp4' } } });
     expect(doc).toMatchObject({ kind: 'media', file_id: 'd', is_video: true });
+  });
+
+  it('forwards text and conversation buttons to the app bot', async () => {
     const [text] = await route({ message: { chat: { id: 356 }, text: 'מה קורה' } });
-    expect(text).toMatchObject({ kind: 'other', app_url: 'https://bp.example' });
+    expect(text).toEqual({
+      kind: 'bot',
+      chat_id: '356',
+      app_url: 'https://bp.example',
+      app_api_token: 'api-tok',
+      event: { chat_id: '356', kind: 'text', text: 'מה קורה' },
+    });
+    const [button] = await route({ callback_query: { id: 'q7', data: 'b|abc123|camp|0', message: { chat: { id: 356 }, message_id: 9 } } });
+    expect(button!.event).toEqual({ chat_id: '356', kind: 'button', data: 'b|abc123|camp|0', message_id: 9, query_id: 'q7' });
+    await expect(
+      run('telegram-route.js', { nodes: { 'Load Config': CONFIG.filter((c) => c.key !== 'app_url'), 'Telegram Trigger': [{ message: { chat: { id: 356 }, text: 'x' } }] } }),
+    ).rejects.toThrow(/app_url/);
   });
 });
 
@@ -192,36 +206,22 @@ describe('publish to instagram', () => {
   });
 });
 
-describe('telegram media intake', () => {
-  const nodes = (text: string, config = CONFIG) => ({
-    'Load Config': config,
-    'Route Update': [{ kind: 'media', text, is_video: false, chat_id: '356' }],
-    'Upload to Cloudinary': [{ secure_url: IMG }],
-    'Read Catalog': [
-      { campaigns: [{ id: 'winter', name: 'חורף', key_message: 'חם' }], products: [{ id: 'kitchen', name: 'מטבח' }], brand: { voice: 'חם' } },
-    ],
+describe('bot events', () => {
+  const route = { kind: 'media', chat_id: '356', is_video: true, text: '#winter', app_url: 'https://bp.example', app_api_token: 't' };
+
+  it('turns the Cloudinary upload into a media event', async () => {
+    const [out] = await run('bot-media-event.js', { json: { secure_url: IMG }, nodes: { 'Route Update': [route] } });
+    expect(out!.event).toEqual({ kind: 'media', chat_id: '356', media_url: IMG, is_video: true, text: '#winter' });
+    await expect(run('bot-media-event.js', { json: { error: 'x' }, nodes: { 'Route Update': [route] } })).rejects.toThrow(/secure_url/);
   });
 
-  it('matches #tags to campaign/product and uses the rest as the AI brief', async () => {
-    const [req] = await run('intake-request.js', { nodes: nodes('#Winter #kitchen לפני ואחרי') });
-    expect(req).toMatchObject({ use_ai: true, campaign_id: 'winter', product_id: 'kitchen', brief: 'לפני ואחרי' });
-    expect(req!.request).toMatchObject({ media: [IMG], campaign: { name: 'חורף' }, brand: { voice: 'חם' } });
-  });
-
-  it('keeps "!" text verbatim without AI', async () => {
-    const [req] = await run('intake-request.js', { nodes: nodes('!הקפשן — שלי') });
-    expect(req).toMatchObject({ use_ai: false, fallback_caption: 'הקפשן - שלי' });
-  });
-
-  it('builds the draft from the first AI variant, or falls back', async () => {
-    const [req] = await run('intake-request.js', { nodes: nodes('בריף') });
-    const ai = { variants: [{ angle: 'א', caption: 'גוף', hashtags: ['a', '#b'] }, { angle: 'ב', caption: 'אחר', hashtags: [] }] };
-    const [draft] = await run('intake-draft.js', { json: ai, nodes: { 'Build Caption Request': [req!] } });
-    expect(draft).toMatchObject({ caption: 'גוף\n\n#a #b', status: 'draft', ai_used: true, type: 'POST' });
-    expect(String(draft!.alternatives)).toContain('אחר');
-
-    const [fallback] = await run('intake-draft.js', { json: { error: { message: 'timeout' } }, nodes: { 'Build Caption Request': [req!] } });
-    expect(fallback).toMatchObject({ caption: 'בריף', ai_used: false, ai_error: 'timeout' });
+  it('returns AI variants, or the failure, with the conversation nonce', async () => {
+    const nodes = { 'Route Update': [route], 'Ask Bot': [{ generate: { nonce: 'n1', request: {} } }] };
+    const result = { variants: [{ angle: 'a', caption: 'c', hashtags: [] }] };
+    const [ok] = await run('bot-variants-event.js', { json: result, nodes });
+    expect(ok!.event).toEqual({ kind: 'variants', chat_id: '356', nonce: 'n1', result });
+    const [failed] = await run('bot-variants-event.js', { json: { error: { message: '502 - overloaded' } }, nodes });
+    expect(failed!.event).toEqual({ kind: 'variants', chat_id: '356', nonce: 'n1', error: '502 - overloaded' });
   });
 });
 

@@ -10,7 +10,7 @@ import { igImage } from '../src/shared/media.ts';
 import { isApproved, isVideoUrl, mediaList, toPost, type Post } from '../src/shared/post.ts';
 import { databaseUrl, env } from './cli-env.ts';
 
-const REQUIRED_SETTINGS = ['access_token', 'ig_user_id', 'telegram_chat_id', 'app_url', 'app_api_token'];
+const REQUIRED_SETTINGS = ['access_token', 'ig_user_id', 'telegram_chat_id', 'telegram_bot_token', 'app_url', 'app_api_token'];
 
 const one = (s: string, n = 40) => s.replace(/\s+/g, ' ').trim().slice(0, n);
 

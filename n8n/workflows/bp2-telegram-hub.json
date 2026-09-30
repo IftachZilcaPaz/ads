@@ -49,7 +49,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ---- shared helpers (inlined into every code node by scripts/build-n8n.mjs) ----\nconst TZ = 'Asia/Jerusalem';\nconst LOCAL_RE = /^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}$/;\n\n/** Israel wall-clock \"YYYY-MM-DD HH:mm\"; comparable as plain strings. */\nconst toLocal = (date = new Date()) =>\n  new Intl.DateTimeFormat('sv-SE', {\n    timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit',\n    hour: '2-digit', minute: '2-digit', hour12: false,\n  }).format(date).replace(' 24:', ' 00:');\n\nconst addMinutesLocal = (value, minutes) => {\n  const [d, t] = value.split(' ');\n  const [y, m, day] = d.split('-').map(Number);\n  const [hh, mm] = t.split(':').map(Number);\n  return new Date(Date.UTC(y, m - 1, day, hh, mm + minutes)).toISOString().slice(0, 16).replace('T', ' ');\n};\n\n/** key/value rows of the `config` tab → object. */\nconst loadConfig = (nodeName = 'Load Config') => {\n  const cfg = {};\n  for (const it of $(nodeName).all()) {\n    if (it.json.key) cfg[String(it.json.key).trim()] = String(it.json.value ?? '').trim();\n  }\n  return cfg;\n};\n\nconst str = (v) => String(v ?? '').trim();\nconst cleanCaption = (s) => String(s ?? '').replace(/[—–]/g, '-');\nconst mediaList = (s) => str(s).split(/[\\s,]+/).filter(Boolean);\nconst isVideoUrl = (u) => /\\.(mp4|mov|m4v|webm)(\\?|#|$)/i.test(u) || /\\/video\\/upload\\//.test(u);\n\n/** Approved = explicit approval stamp, or a standing \"auto\" approval. */\nconst isApproved = (r) => str(r.approval_mode) === 'auto' || str(r.approved_at) !== '';\n\n/** Small JPEG still of a Cloudinary image/video (Telegram previews, thumbnails). */\nconst cloudinaryStill = (url, width = 1080) => {\n  const m = /^(https:\\/\\/res\\.cloudinary\\.com\\/[^/]+)\\/(image|video)\\/upload\\/(.+)$/.exec(url || '');\n  if (!m) return url || '';\n  if (m[2] === 'video') return `${m[1]}/video/upload/so_1,w_${width},c_limit/${m[3].replace(/\\.[a-z0-9]+(\\?.*)?$/i, '')}.jpg`;\n  return `${m[1]}/image/upload/w_${width},c_limit,q_auto,f_jpg/${m[3]}`;\n};\n\n// Instagram takes only JPEG, and feed images only between 4:5 and 1.91:1.\n// Cloudinary pads outliers (never crops) and converts, at delivery time.\nconst IG_FEED_FIT = 'if_ar_lt_0.8/c_pad,ar_4:5,b_auto/if_end/if_ar_gt_1.91/c_pad,ar_1.91,b_auto/if_end/';\nconst igImage = (url, { feed = true } = {}) => {\n  const m = /^(https:\\/\\/res\\.cloudinary\\.com\\/[^/]+)\\/image\\/upload\\/(.+)$/.exec(url || '');\n  if (!m) return url || '';\n  const path = m[2].replace(/\\.[a-z0-9]+(\\?.*)?$/i, '');\n  return `${m[1]}/image/upload/${feed ? IG_FEED_FIT : ''}c_limit,w_1440/q_auto:good/${path}.jpg`;\n};\n\nconst randomRef = () => Math.random().toString(36).slice(2, 8);\n// ---- end shared helpers ----\n// Only the owner's chat may drive the bot. Anyone else is silently ignored,\n// so strangers cannot create drafts or press approval buttons.\nconst cfg = loadConfig();\nconst update = $('Telegram Trigger').first().json;\nconst owner = str(cfg.telegram_chat_id);\n\nconst cb = update.callback_query;\nconst msg = update.message;\nconst fromChat = str(cb ? cb.message && cb.message.chat && cb.message.chat.id : msg && msg.chat && msg.chat.id);\nif (!owner || fromChat !== owner) return [];\n\nif (cb) {\n  // Buttons carry \"action:id:ref\" (old messages: \"action:id\").\n  const [action = '', id = '', ref = ''] = str(cb.data).split(':');\n  return [{ json: { kind: 'callback', action, id, ref, query_id: cb.id, chat_id: fromChat, message_id: cb.message.message_id } }];\n}\n\nconst text = str(msg.caption || msg.text);\nlet file = null;\nif (msg.photo && msg.photo.length) file = { file_id: msg.photo[msg.photo.length - 1].file_id, is_video: false };\nelse if (msg.video) file = { file_id: msg.video.file_id, is_video: true };\nelse if (msg.document && /^(image|video)\\//.test(msg.document.mime_type || '')) {\n  file = { file_id: msg.document.file_id, is_video: /^video\\//.test(msg.document.mime_type) };\n}\n\nif (file) {\n  return [{\n    json: { kind: 'media', ...file, text, chat_id: fromChat, cloudinary_cloud: cfg.cloudinary_cloud || '', cloudinary_preset: cfg.cloudinary_preset || '' },\n  }];\n}\nreturn [{ json: { kind: 'other', text, chat_id: fromChat, app_url: cfg.app_url || '' } }];\n"
+        "jsCode": "// ---- shared helpers (inlined into every code node by scripts/build-n8n.mjs) ----\nconst TZ = 'Asia/Jerusalem';\nconst LOCAL_RE = /^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}$/;\n\n/** Israel wall-clock \"YYYY-MM-DD HH:mm\"; comparable as plain strings. */\nconst toLocal = (date = new Date()) =>\n  new Intl.DateTimeFormat('sv-SE', {\n    timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit',\n    hour: '2-digit', minute: '2-digit', hour12: false,\n  }).format(date).replace(' 24:', ' 00:');\n\nconst addMinutesLocal = (value, minutes) => {\n  const [d, t] = value.split(' ');\n  const [y, m, day] = d.split('-').map(Number);\n  const [hh, mm] = t.split(':').map(Number);\n  return new Date(Date.UTC(y, m - 1, day, hh, mm + minutes)).toISOString().slice(0, 16).replace('T', ' ');\n};\n\n/** key/value rows of the `config` tab → object. */\nconst loadConfig = (nodeName = 'Load Config') => {\n  const cfg = {};\n  for (const it of $(nodeName).all()) {\n    if (it.json.key) cfg[String(it.json.key).trim()] = String(it.json.value ?? '').trim();\n  }\n  return cfg;\n};\n\nconst str = (v) => String(v ?? '').trim();\nconst cleanCaption = (s) => String(s ?? '').replace(/[—–]/g, '-');\nconst mediaList = (s) => str(s).split(/[\\s,]+/).filter(Boolean);\nconst isVideoUrl = (u) => /\\.(mp4|mov|m4v|webm)(\\?|#|$)/i.test(u) || /\\/video\\/upload\\//.test(u);\n\n/** Approved = explicit approval stamp, or a standing \"auto\" approval. */\nconst isApproved = (r) => str(r.approval_mode) === 'auto' || str(r.approved_at) !== '';\n\n/** Small JPEG still of a Cloudinary image/video (Telegram previews, thumbnails). */\nconst cloudinaryStill = (url, width = 1080) => {\n  const m = /^(https:\\/\\/res\\.cloudinary\\.com\\/[^/]+)\\/(image|video)\\/upload\\/(.+)$/.exec(url || '');\n  if (!m) return url || '';\n  if (m[2] === 'video') return `${m[1]}/video/upload/so_1,w_${width},c_limit/${m[3].replace(/\\.[a-z0-9]+(\\?.*)?$/i, '')}.jpg`;\n  return `${m[1]}/image/upload/w_${width},c_limit,q_auto,f_jpg/${m[3]}`;\n};\n\n// Instagram takes only JPEG, and feed images only between 4:5 and 1.91:1.\n// Cloudinary pads outliers (never crops) and converts, at delivery time.\nconst IG_FEED_FIT = 'if_ar_lt_0.8/c_pad,ar_4:5,b_auto/if_end/if_ar_gt_1.91/c_pad,ar_1.91,b_auto/if_end/';\nconst igImage = (url, { feed = true } = {}) => {\n  const m = /^(https:\\/\\/res\\.cloudinary\\.com\\/[^/]+)\\/image\\/upload\\/(.+)$/.exec(url || '');\n  if (!m) return url || '';\n  const path = m[2].replace(/\\.[a-z0-9]+(\\?.*)?$/i, '');\n  return `${m[1]}/image/upload/${feed ? IG_FEED_FIT : ''}c_limit,w_1440/q_auto:good/${path}.jpg`;\n};\n\nconst randomRef = () => Math.random().toString(36).slice(2, 8);\n// ---- end shared helpers ----\n// Only the owner's chat may drive the bot. Anyone else is silently ignored,\n// so strangers cannot create drafts or press approval buttons.\n//   approval buttons (\"action:id:ref\")  → handled here in n8n (decide_approval)\n//   photo / video                        → Cloudinary, then the app's bot\n//   anything else (text, \"b|...\" buttons) → the app's bot (/api/bot)\nconst cfg = loadConfig();\nconst update = $('Telegram Trigger').first().json;\nconst owner = str(cfg.telegram_chat_id);\n\nconst cb = update.callback_query;\nconst msg = update.message;\nconst fromChat = str(cb ? cb.message && cb.message.chat && cb.message.chat.id : msg && msg.chat && msg.chat.id);\nif (!owner || fromChat !== owner) return [];\n\nconst app = { chat_id: fromChat, app_url: str(cfg.app_url).replace(/\\/+$/, ''), app_api_token: str(cfg.app_api_token) };\nconst toBot = (event) => {\n  if (!app.app_url || !app.app_api_token) throw new Error('Missing app_url / app_api_token in settings (npm run db:set)');\n  return [{ json: { kind: 'bot', ...app, event: { chat_id: fromChat, ...event } } }];\n};\n\nif (cb) {\n  const data = str(cb.data);\n  if (data.startsWith('b|')) return toBot({ kind: 'button', data, message_id: cb.message.message_id, query_id: str(cb.id) });\n  // Buttons carry \"action:id:ref\" (old messages: \"action:id\").\n  const [action = '', id = '', ref = ''] = data.split(':');\n  return [{ json: { kind: 'callback', action, id, ref, query_id: cb.id, chat_id: fromChat, message_id: cb.message.message_id } }];\n}\n\nconst text = str(msg.caption || msg.text);\nlet file = null;\nif (msg.photo && msg.photo.length) file = { file_id: msg.photo[msg.photo.length - 1].file_id, is_video: false };\nelse if (msg.video) file = { file_id: msg.video.file_id, is_video: true };\nelse if (msg.document && /^(image|video)\\//.test(msg.document.mime_type || '')) {\n  file = { file_id: msg.document.file_id, is_video: /^video\\//.test(msg.document.mime_type) };\n}\n\nif (file) {\n  return [{\n    json: { kind: 'media', ...file, text, ...app, cloudinary_cloud: cfg.cloudinary_cloud || '', cloudinary_preset: cfg.cloudinary_preset || '' },\n  }];\n}\nreturn toBot({ kind: 'text', text });\n"
       },
       "name": "Route Update",
       "type": "n8n-nodes-base.code",
@@ -368,38 +368,45 @@
     },
     {
       "parameters": {
-        "operation": "executeQuery",
-        "query": "select\n  (select coalesce(jsonb_agg(to_jsonb(c)), '[]'::jsonb) from campaigns c where c.status <> 'ended') as campaigns,\n  (select coalesce(jsonb_agg(to_jsonb(p)), '[]'::jsonb) from products p where p.status = 'active') as products,\n  (select coalesce(jsonb_object_agg(key, value), '{}'::jsonb) from brand) as brand",
-        "options": {}
+        "jsCode": "// The uploaded file becomes a \"media\" event for the app's bot, which asks the questions.\nconst media = $('Route Update').first().json;\nconst upload = $json;\nif (!upload.secure_url) throw new Error('Cloudinary did not return secure_url: ' + JSON.stringify(upload).slice(0, 200));\nreturn [{\n  json: {\n    ...media,\n    event: { kind: 'media', chat_id: media.chat_id, media_url: upload.secure_url, is_video: media.is_video, text: media.text },\n  },\n}];\n"
       },
-      "name": "Read Catalog",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
+      "name": "Media Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         1568,
         528
       ],
-      "credentials": {
-        "postgres": {
-          "id": "__PG_CREDENTIAL_ID__",
-          "name": "BP Postgres"
-        }
-      },
-      "executeOnce": true,
-      "id": "a3ed749f-df33-4c57-ad24-b6b1d338e459"
+      "id": "a4753c0a-1630-4311-a572-b5a4289c2b79"
     },
     {
       "parameters": {
-        "jsCode": "// ---- shared helpers (inlined into every code node by scripts/build-n8n.mjs) ----\nconst TZ = 'Asia/Jerusalem';\nconst LOCAL_RE = /^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}$/;\n\n/** Israel wall-clock \"YYYY-MM-DD HH:mm\"; comparable as plain strings. */\nconst toLocal = (date = new Date()) =>\n  new Intl.DateTimeFormat('sv-SE', {\n    timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit',\n    hour: '2-digit', minute: '2-digit', hour12: false,\n  }).format(date).replace(' 24:', ' 00:');\n\nconst addMinutesLocal = (value, minutes) => {\n  const [d, t] = value.split(' ');\n  const [y, m, day] = d.split('-').map(Number);\n  const [hh, mm] = t.split(':').map(Number);\n  return new Date(Date.UTC(y, m - 1, day, hh, mm + minutes)).toISOString().slice(0, 16).replace('T', ' ');\n};\n\n/** key/value rows of the `config` tab → object. */\nconst loadConfig = (nodeName = 'Load Config') => {\n  const cfg = {};\n  for (const it of $(nodeName).all()) {\n    if (it.json.key) cfg[String(it.json.key).trim()] = String(it.json.value ?? '').trim();\n  }\n  return cfg;\n};\n\nconst str = (v) => String(v ?? '').trim();\nconst cleanCaption = (s) => String(s ?? '').replace(/[—–]/g, '-');\nconst mediaList = (s) => str(s).split(/[\\s,]+/).filter(Boolean);\nconst isVideoUrl = (u) => /\\.(mp4|mov|m4v|webm)(\\?|#|$)/i.test(u) || /\\/video\\/upload\\//.test(u);\n\n/** Approved = explicit approval stamp, or a standing \"auto\" approval. */\nconst isApproved = (r) => str(r.approval_mode) === 'auto' || str(r.approved_at) !== '';\n\n/** Small JPEG still of a Cloudinary image/video (Telegram previews, thumbnails). */\nconst cloudinaryStill = (url, width = 1080) => {\n  const m = /^(https:\\/\\/res\\.cloudinary\\.com\\/[^/]+)\\/(image|video)\\/upload\\/(.+)$/.exec(url || '');\n  if (!m) return url || '';\n  if (m[2] === 'video') return `${m[1]}/video/upload/so_1,w_${width},c_limit/${m[3].replace(/\\.[a-z0-9]+(\\?.*)?$/i, '')}.jpg`;\n  return `${m[1]}/image/upload/w_${width},c_limit,q_auto,f_jpg/${m[3]}`;\n};\n\n// Instagram takes only JPEG, and feed images only between 4:5 and 1.91:1.\n// Cloudinary pads outliers (never crops) and converts, at delivery time.\nconst IG_FEED_FIT = 'if_ar_lt_0.8/c_pad,ar_4:5,b_auto/if_end/if_ar_gt_1.91/c_pad,ar_1.91,b_auto/if_end/';\nconst igImage = (url, { feed = true } = {}) => {\n  const m = /^(https:\\/\\/res\\.cloudinary\\.com\\/[^/]+)\\/image\\/upload\\/(.+)$/.exec(url || '');\n  if (!m) return url || '';\n  const path = m[2].replace(/\\.[a-z0-9]+(\\?.*)?$/i, '');\n  return `${m[1]}/image/upload/${feed ? IG_FEED_FIT : ''}c_limit,w_1440/q_auto:good/${path}.jpg`;\n};\n\nconst randomRef = () => Math.random().toString(36).slice(2, 8);\n// ---- end shared helpers ----\n// Turns an uploaded Telegram photo/video into a caption request for the app.\n//   \"#campaign-id #product-id free text\"  → AI caption, text is the brief\n//   \"!exact caption\"                      → use the text verbatim, no AI\nconst cfg = loadConfig();\nconst media = $('Route Update').first().json;\nconst upload = $('Upload to Cloudinary').first().json;\nif (!upload.secure_url) throw new Error('Cloudinary did not return secure_url: ' + JSON.stringify(upload).slice(0, 200));\n\nconst catalog = $('Read Catalog').first().json;\nconst campaigns = catalog.campaigns || [];\nconst products = catalog.products || [];\nconst brand = catalog.brand || {};\n\nconst text = media.text;\nconst verbatim = text.startsWith('!');\nconst tags = [...text.matchAll(/#([a-z0-9][a-z0-9_-]{1,39})/gi)].map((m) => m[1].toLowerCase());\nconst campaign = campaigns.find((c) => tags.includes(str(c.id).toLowerCase())) || null;\nconst product = products.find((p) => tags.includes(str(p.id).toLowerCase())) || null;\nconst brief = text.replace(/#[a-z0-9][a-z0-9_-]{1,39}/gi, ' ').replace(/\\s+/g, ' ').trim();\n\nconst pick = (obj, keys) => (obj ? Object.fromEntries(keys.map((k) => [k, str(obj[k])])) : null);\nconst useAi = !verbatim && !!cfg.app_url && !!cfg.app_api_token;\n\nreturn [{\n  json: {\n    use_ai: useAi,\n    app_url: cfg.app_url.replace(/\\/+$/, ''),\n    app_api_token: cfg.app_api_token,\n    media_url: upload.secure_url,\n    is_video: media.is_video,\n    chat_id: media.chat_id,\n    campaign_id: campaign ? str(campaign.id) : '',\n    product_id: product ? str(product.id) : '',\n    fallback_caption: cleanCaption(verbatim ? text.slice(1).trim() : brief),\n    brief,\n    request: {\n      media: [upload.secure_url],\n      post_type: media.is_video ? 'REEL' : 'POST',\n      brief,\n      campaign: pick(campaign, ['id', 'name', 'status', 'start_date', 'end_date', 'goal', 'audience', 'key_message', 'offer', 'cta', 'hashtags', 'link', 'tone', 'notes']),\n      product: pick(product, ['id', 'name', 'status', 'category', 'description', 'benefits', 'price', 'url', 'hashtags', 'notes']),\n      brand,\n      variants: 3,\n    },\n  },\n}];\n"
+        "method": "POST",
+        "url": "={{ $('Route Update').first().json.app_url }}/api/bot",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Route Update').first().json.app_api_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.event) }}",
+        "options": {
+          "timeout": 30000
+        }
       },
-      "name": "Build Caption Request",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "name": "Ask Bot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         1792,
-        528
+        704
       ],
-      "id": "20ab1575-abd9-462f-ac2e-84f209fceccc"
+      "id": "9be913f5-31c6-4b60-a01e-7857267b264e"
     },
     {
       "parameters": {
@@ -412,8 +419,8 @@
           },
           "conditions": [
             {
-              "id": "50243ca1-eadf-4226-a469-f9d2d5fb9997",
-              "leftValue": "={{ String($json.use_ai) }}",
+              "id": "fa5848bd-d24e-4ab3-af6d-dc086d63f418",
+              "leftValue": "={{ String(!!$json.generate) }}",
               "rightValue": "true",
               "operator": {
                 "type": "string",
@@ -425,31 +432,31 @@
         },
         "options": {}
       },
-      "name": "Use AI?",
+      "name": "Needs Caption?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
         2016,
-        528
+        704
       ],
-      "id": "27d49285-c61f-4d4c-a280-b0b014aeb46c"
+      "id": "a2ddd9e6-814e-4a3d-ace5-1f89eef39480"
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $json.app_url }}/api/captions",
+        "url": "={{ $('Route Update').first().json.app_url }}/api/captions",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $json.app_api_token }}"
+              "value": "=Bearer {{ $('Route Update').first().json.app_api_token }}"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.request) }}",
+        "jsonBody": "={{ JSON.stringify($json.generate.request) }}",
         "options": {
           "timeout": 90000
         }
@@ -459,97 +466,52 @@
       "typeVersion": 4.2,
       "position": [
         2240,
-        528
+        704
       ],
       "onError": "continueRegularOutput",
       "id": "f2de22e2-0046-48aa-a596-e58e0e89576a"
     },
     {
       "parameters": {
-        "jsCode": "// ---- shared helpers (inlined into every code node by scripts/build-n8n.mjs) ----\nconst TZ = 'Asia/Jerusalem';\nconst LOCAL_RE = /^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}$/;\n\n/** Israel wall-clock \"YYYY-MM-DD HH:mm\"; comparable as plain strings. */\nconst toLocal = (date = new Date()) =>\n  new Intl.DateTimeFormat('sv-SE', {\n    timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit',\n    hour: '2-digit', minute: '2-digit', hour12: false,\n  }).format(date).replace(' 24:', ' 00:');\n\nconst addMinutesLocal = (value, minutes) => {\n  const [d, t] = value.split(' ');\n  const [y, m, day] = d.split('-').map(Number);\n  const [hh, mm] = t.split(':').map(Number);\n  return new Date(Date.UTC(y, m - 1, day, hh, mm + minutes)).toISOString().slice(0, 16).replace('T', ' ');\n};\n\n/** key/value rows of the `config` tab → object. */\nconst loadConfig = (nodeName = 'Load Config') => {\n  const cfg = {};\n  for (const it of $(nodeName).all()) {\n    if (it.json.key) cfg[String(it.json.key).trim()] = String(it.json.value ?? '').trim();\n  }\n  return cfg;\n};\n\nconst str = (v) => String(v ?? '').trim();\nconst cleanCaption = (s) => String(s ?? '').replace(/[—–]/g, '-');\nconst mediaList = (s) => str(s).split(/[\\s,]+/).filter(Boolean);\nconst isVideoUrl = (u) => /\\.(mp4|mov|m4v|webm)(\\?|#|$)/i.test(u) || /\\/video\\/upload\\//.test(u);\n\n/** Approved = explicit approval stamp, or a standing \"auto\" approval. */\nconst isApproved = (r) => str(r.approval_mode) === 'auto' || str(r.approved_at) !== '';\n\n/** Small JPEG still of a Cloudinary image/video (Telegram previews, thumbnails). */\nconst cloudinaryStill = (url, width = 1080) => {\n  const m = /^(https:\\/\\/res\\.cloudinary\\.com\\/[^/]+)\\/(image|video)\\/upload\\/(.+)$/.exec(url || '');\n  if (!m) return url || '';\n  if (m[2] === 'video') return `${m[1]}/video/upload/so_1,w_${width},c_limit/${m[3].replace(/\\.[a-z0-9]+(\\?.*)?$/i, '')}.jpg`;\n  return `${m[1]}/image/upload/w_${width},c_limit,q_auto,f_jpg/${m[3]}`;\n};\n\n// Instagram takes only JPEG, and feed images only between 4:5 and 1.91:1.\n// Cloudinary pads outliers (never crops) and converts, at delivery time.\nconst IG_FEED_FIT = 'if_ar_lt_0.8/c_pad,ar_4:5,b_auto/if_end/if_ar_gt_1.91/c_pad,ar_1.91,b_auto/if_end/';\nconst igImage = (url, { feed = true } = {}) => {\n  const m = /^(https:\\/\\/res\\.cloudinary\\.com\\/[^/]+)\\/image\\/upload\\/(.+)$/.exec(url || '');\n  if (!m) return url || '';\n  const path = m[2].replace(/\\.[a-z0-9]+(\\?.*)?$/i, '');\n  return `${m[1]}/image/upload/${feed ? IG_FEED_FIT : ''}c_limit,w_1440/q_auto:good/${path}.jpg`;\n};\n\nconst randomRef = () => Math.random().toString(36).slice(2, 8);\n// ---- end shared helpers ----\n// Builds the draft row. Uses the first AI variant when available and falls\n// back to the Telegram text if the AI call was skipped or failed.\nconst req = $('Build Caption Request').first().json;\nconst ai = $json && Array.isArray($json.variants) ? $json : null;\n\nconst compose = (v) => {\n  const tags = [...new Set((v.hashtags || []).map((h) => '#' + String(h).replace(/^#+/, '').trim()).filter((h) => h.length > 1))];\n  const body = cleanCaption(v.caption).trim();\n  return tags.length ? `${body}\\n\\n${tags.slice(0, 30).join(' ')}` : body;\n};\n\nconst variants = ai ? ai.variants.filter((v) => str(v.caption)) : [];\nconst caption = variants.length ? compose(variants[0]) : req.fallback_caption;\nconst now = toLocal();\nconst day = now.slice(0, 10);\n\nconst errorOf = (j) => (j && (typeof j.error === 'string' ? j.error : j.error && j.error.message)) || '';\nconst aiError = req.use_ai && !variants.length ? str(errorOf($json)) || 'no response' : '';\nconst alternatives = variants.slice(1).map((v, i) => `— גרסה ${i + 2} (${str(v.angle)}):\\n${compose(v)}`).join('\\n\\n');\n\nreturn [{\n  json: {\n    id: `${day}-${Math.floor(Math.random() * 36 ** 4).toString(36).padStart(4, '0')}`,\n    type: req.is_video ? 'REEL' : 'POST',\n    media_urls: req.media_url,\n    caption,\n    approval_mode: 'approve',\n    status: 'draft',\n    campaign_id: req.campaign_id,\n    product_id: req.product_id,\n    notes: req.brief ? `בריף מטלגרם: ${req.brief}`.slice(0, 500) : '',\n    created_at: now,\n    updated_at: now,\n    chat_id: req.chat_id,\n    app_url: req.app_url,\n    ai_used: variants.length > 0,\n    ai_error: aiError,\n    alternatives,\n  },\n}];\n"
+        "jsCode": "// ---- shared helpers (inlined into every code node by scripts/build-n8n.mjs) ----\nconst TZ = 'Asia/Jerusalem';\nconst LOCAL_RE = /^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}$/;\n\n/** Israel wall-clock \"YYYY-MM-DD HH:mm\"; comparable as plain strings. */\nconst toLocal = (date = new Date()) =>\n  new Intl.DateTimeFormat('sv-SE', {\n    timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit',\n    hour: '2-digit', minute: '2-digit', hour12: false,\n  }).format(date).replace(' 24:', ' 00:');\n\nconst addMinutesLocal = (value, minutes) => {\n  const [d, t] = value.split(' ');\n  const [y, m, day] = d.split('-').map(Number);\n  const [hh, mm] = t.split(':').map(Number);\n  return new Date(Date.UTC(y, m - 1, day, hh, mm + minutes)).toISOString().slice(0, 16).replace('T', ' ');\n};\n\n/** key/value rows of the `config` tab → object. */\nconst loadConfig = (nodeName = 'Load Config') => {\n  const cfg = {};\n  for (const it of $(nodeName).all()) {\n    if (it.json.key) cfg[String(it.json.key).trim()] = String(it.json.value ?? '').trim();\n  }\n  return cfg;\n};\n\nconst str = (v) => String(v ?? '').trim();\nconst cleanCaption = (s) => String(s ?? '').replace(/[—–]/g, '-');\nconst mediaList = (s) => str(s).split(/[\\s,]+/).filter(Boolean);\nconst isVideoUrl = (u) => /\\.(mp4|mov|m4v|webm)(\\?|#|$)/i.test(u) || /\\/video\\/upload\\//.test(u);\n\n/** Approved = explicit approval stamp, or a standing \"auto\" approval. */\nconst isApproved = (r) => str(r.approval_mode) === 'auto' || str(r.approved_at) !== '';\n\n/** Small JPEG still of a Cloudinary image/video (Telegram previews, thumbnails). */\nconst cloudinaryStill = (url, width = 1080) => {\n  const m = /^(https:\\/\\/res\\.cloudinary\\.com\\/[^/]+)\\/(image|video)\\/upload\\/(.+)$/.exec(url || '');\n  if (!m) return url || '';\n  if (m[2] === 'video') return `${m[1]}/video/upload/so_1,w_${width},c_limit/${m[3].replace(/\\.[a-z0-9]+(\\?.*)?$/i, '')}.jpg`;\n  return `${m[1]}/image/upload/w_${width},c_limit,q_auto,f_jpg/${m[3]}`;\n};\n\n// Instagram takes only JPEG, and feed images only between 4:5 and 1.91:1.\n// Cloudinary pads outliers (never crops) and converts, at delivery time.\nconst IG_FEED_FIT = 'if_ar_lt_0.8/c_pad,ar_4:5,b_auto/if_end/if_ar_gt_1.91/c_pad,ar_1.91,b_auto/if_end/';\nconst igImage = (url, { feed = true } = {}) => {\n  const m = /^(https:\\/\\/res\\.cloudinary\\.com\\/[^/]+)\\/image\\/upload\\/(.+)$/.exec(url || '');\n  if (!m) return url || '';\n  const path = m[2].replace(/\\.[a-z0-9]+(\\?.*)?$/i, '');\n  return `${m[1]}/image/upload/${feed ? IG_FEED_FIT : ''}c_limit,w_1440/q_auto:good/${path}.jpg`;\n};\n\nconst randomRef = () => Math.random().toString(36).slice(2, 8);\n// ---- end shared helpers ----\n// Hands the AI result (or its failure) back to the bot, tagged with the\n// conversation nonce so a late or duplicate result is ignored.\nconst route = $('Route Update').first().json;\nconst asked = $('Ask Bot').first().json;\nconst r = $json || {};\nconst errorOf = (j) => (typeof j.error === 'string' ? j.error : j.error && j.error.message) || '';\nconst ok = Array.isArray(r.variants);\nreturn [{\n  json: {\n    ...route,\n    event: {\n      kind: 'variants',\n      chat_id: route.chat_id,\n      nonce: str(asked.generate && asked.generate.nonce),\n      ...(ok ? { result: r } : { error: str(errorOf(r)).slice(0, 900) || 'no response' }),\n    },\n  },\n}];\n"
       },
-      "name": "Make Draft",
+      "name": "Variants Event",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         2464,
         704
       ],
-      "id": "8c522a3e-4f7a-4efe-ac4e-ba5ed21c8faf"
+      "id": "d625c296-d01a-4511-a12d-75a1335b85fd"
     },
     {
       "parameters": {
-        "operation": "executeQuery",
-        "query": "select id from insert_draft($1)",
+        "method": "POST",
+        "url": "={{ $('Route Update').first().json.app_url }}/api/bot",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Route Update').first().json.app_api_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.event) }}",
         "options": {
-          "queryReplacement": "={{ [JSON.stringify($json)] }}"
+          "timeout": 30000
         }
       },
-      "name": "Insert Draft",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
+      "name": "Deliver Variants",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         2688,
         704
       ],
-      "credentials": {
-        "postgres": {
-          "id": "__PG_CREDENTIAL_ID__",
-          "name": "BP Postgres"
-        }
-      },
-      "executeOnce": true,
-      "id": "116777b7-5f5f-41fd-a5cb-9e9248245862"
-    },
-    {
-      "parameters": {
-        "chatId": "={{ $('Make Draft').first().json.chat_id }}",
-        "text": "={{ ('📝 נוצרה טיוטה ' + $('Make Draft').first().json.id + '\\n' + ($('Make Draft').first().json.ai_used ? '✨ קפשן מה-AI:' : ($('Make Draft').first().json.ai_error ? '⚠️ ה-AI לא זמין (' + $('Make Draft').first().json.ai_error + ') - שמרתי את הטקסט שלך:' : 'הקפשן:')) + '\\n\\n' + ($('Make Draft').first().json.caption || '(ריק)') + ($('Make Draft').first().json.alternatives ? '\\n\\nגרסאות נוספות:\\n' + $('Make Draft').first().json.alternatives : '') + ($('Make Draft').first().json.app_url ? '\\n\\nלקביעת מועד ואישור: ' + $('Make Draft').first().json.app_url : '')).slice(0, 4000) }}",
-        "additionalFields": {
-          "appendAttribution": false,
-          "disable_web_page_preview": true
-        }
-      },
-      "name": "Confirm Draft",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
-      "position": [
-        2912,
-        704
-      ],
-      "webhookId": "c8dfca64-3af9-491a-a848-e24c09992734",
-      "credentials": {
-        "telegramApi": {
-          "id": "gQQT4wEAXLPFc22J",
-          "name": "ReynovationSocial"
-        }
-      },
-      "id": "e4b55766-7a6e-4e84-a57e-bb55568ea5d1"
-    },
-    {
-      "parameters": {
-        "chatId": "={{ $json.chat_id }}",
-        "text": "={{ 'שלח לי תמונה או וידאו ואכין טיוטה עם קפשן 📝\\n\\n• #מזהה-קמפיין או #מזהה-מוצר בטקסט - ישייך ויכתוב בהתאם\\n• שאר הטקסט = בריף ל-AI\\n• טקסט שמתחיל ב-! נשמר כקפשן כמו שהוא' + ($json.app_url ? '\\n\\nהלוח: ' + $json.app_url : '') }}",
-        "additionalFields": {
-          "appendAttribution": false,
-          "disable_web_page_preview": true
-        }
-      },
-      "name": "Usage Hint",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
-      "position": [
-        1120,
-        880
-      ],
-      "webhookId": "dfa9a023-09ef-4d31-a682-85c911294ade",
-      "credentials": {
-        "telegramApi": {
-          "id": "gQQT4wEAXLPFc22J",
-          "name": "ReynovationSocial"
-        }
-      },
-      "id": "07d8160f-f189-48de-a439-b90c13125639"
+      "id": "de6bb566-5666-40c9-adc3-d35bddcdb418"
     }
   ],
   "pinData": {},
@@ -689,7 +651,7 @@
         ],
         [
           {
-            "node": "Usage Hint",
+            "node": "Ask Bot",
             "type": "main",
             "index": 0
           }
@@ -711,47 +673,40 @@
       "main": [
         [
           {
-            "node": "Read Catalog",
+            "node": "Media Event",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Read Catalog": {
+    "Media Event": {
       "main": [
         [
           {
-            "node": "Build Caption Request",
+            "node": "Ask Bot",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Build Caption Request": {
+    "Ask Bot": {
       "main": [
         [
           {
-            "node": "Use AI?",
+            "node": "Needs Caption?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Use AI?": {
+    "Needs Caption?": {
       "main": [
         [
           {
             "node": "Write Caption (AI)",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Make Draft",
             "type": "main",
             "index": 0
           }
@@ -762,29 +717,18 @@
       "main": [
         [
           {
-            "node": "Make Draft",
+            "node": "Variants Event",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Make Draft": {
+    "Variants Event": {
       "main": [
         [
           {
-            "node": "Insert Draft",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Insert Draft": {
-      "main": [
-        [
-          {
-            "node": "Confirm Draft",
+            "node": "Deliver Variants",
             "type": "main",
             "index": 0
           }

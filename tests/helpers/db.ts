@@ -18,6 +18,6 @@ export async function testDb(): Promise<{ db: Db; reset: () => Promise<void> }> 
   await migrate(db, loadMigrations());
   return {
     db,
-    reset: () => db.exec('truncate posts, campaigns, products, brand, settings'),
+    reset: () => db.exec('truncate posts, campaigns, products, brand, settings, bot_sessions'),
   };
 }

@@ -89,12 +89,25 @@ const publisher = workflow({
 // ---------------------------------------------------------------------------
 const decided = "$('Decision').first().json";
 const published = "$('Publish to Instagram').first().json";
-const draft = "$('Make Draft').first().json";
 
-const CATALOG_SQL = `select
-  (select coalesce(jsonb_agg(to_jsonb(c)), '[]'::jsonb) from campaigns c where c.status <> 'ended') as campaigns,
-  (select coalesce(jsonb_agg(to_jsonb(p)), '[]'::jsonb) from products p where p.status = 'active') as products,
-  (select coalesce(jsonb_object_agg(key, value), '{}'::jsonb) from brand) as brand`;
+
+/** Authenticated JSON POST to the app; the base URL and token come from settings. */
+const appPost = (name, pos, path, jsonBody, { timeout, onError } = {}) =>
+  http(
+    name,
+    pos,
+    {
+      method: 'POST',
+      url: `={{ $('Route Update').first().json.app_url }}${path}`,
+      sendHeaders: true,
+      headerParameters: { parameters: [{ name: 'Authorization', value: "=Bearer {{ $('Route Update').first().json.app_api_token }}" }] },
+      sendBody: true,
+      specifyBody: 'json',
+      jsonBody,
+      options: { timeout },
+    },
+    onError ? { onError } : {},
+  );
 
 const telegramHub = workflow({
   name: 'BP 2 - Telegram Hub',
@@ -122,7 +135,7 @@ const telegramHub = workflow({
     ),
     tgEdit('Edit (Done)', [8, 1], `={{ ${decided}.chat_id }}`, `={{ ${decided}.message_id }}`, `={{ ${decided}.edit_text }}`),
 
-    // ----- photo / video → Cloudinary → AI caption → draft -----
+    // ----- everything else is a conversation run by the app (/api/bot) -----
     ifEquals('Is Media?', [4, 3], '={{ $json.kind }}', 'media'),
     tgFile('Get File', [5, 3], '={{ $json.file_id }}'),
     http('Upload to Cloudinary', [6, 3], {
@@ -138,38 +151,12 @@ const telegramHub = workflow({
       },
       options: {},
     }),
-    pg('Read Catalog', [7, 3], CATALOG_SQL),
-    code('Build Caption Request', [8, 3], 'intake-request.js'),
-    ifEquals('Use AI?', [9, 3], '={{ String($json.use_ai) }}', 'true'),
-    http(
-      'Write Caption (AI)',
-      [10, 3],
-      {
-        method: 'POST',
-        url: '={{ $json.app_url }}/api/captions',
-        sendHeaders: true,
-        headerParameters: { parameters: [{ name: 'Authorization', value: '=Bearer {{ $json.app_api_token }}' }] },
-        sendBody: true,
-        specifyBody: 'json',
-        jsonBody: '={{ JSON.stringify($json.request) }}',
-        options: { timeout: 90000 },
-      },
-      { onError: 'continueRegularOutput' },
-    ),
-    code('Make Draft', [11, 4], 'intake-draft.js'),
-    pg('Insert Draft', [12, 4], 'select id from insert_draft($1)', { params: '={{ [JSON.stringify($json)] }}' }),
-    tgMessage(
-      'Confirm Draft',
-      [13, 4],
-      `={{ ${draft}.chat_id }}`,
-      `={{ ('📝 נוצרה טיוטה ' + ${draft}.id + '\\n' + (${draft}.ai_used ? '✨ קפשן מה-AI:' : (${draft}.ai_error ? '⚠️ ה-AI לא זמין (' + ${draft}.ai_error + ') - שמרתי את הטקסט שלך:' : 'הקפשן:')) + '\\n\\n' + (${draft}.caption || '(ריק)') + (${draft}.alternatives ? '\\n\\nגרסאות נוספות:\\n' + ${draft}.alternatives : '') + (${draft}.app_url ? '\\n\\nלקביעת מועד ואישור: ' + ${draft}.app_url : '')).slice(0, 4000) }}`,
-    ),
-    tgMessage(
-      'Usage Hint',
-      [5, 5],
-      '={{ $json.chat_id }}',
-      "={{ 'שלח לי תמונה או וידאו ואכין טיוטה עם קפשן 📝\\n\\n• #מזהה-קמפיין או #מזהה-מוצר בטקסט - ישייך ויכתוב בהתאם\\n• שאר הטקסט = בריף ל-AI\\n• טקסט שמתחיל ב-! נשמר כקפשן כמו שהוא' + ($json.app_url ? '\\n\\nהלוח: ' + $json.app_url : '') }}",
-    ),
+    code('Media Event', [7, 3], 'bot-media-event.js'),
+    appPost('Ask Bot', [8, 4], '/api/bot', '={{ JSON.stringify($json.event) }}', { timeout: 30000 }),
+    ifEquals('Needs Caption?', [9, 4], '={{ String(!!$json.generate) }}', 'true'),
+    appPost('Write Caption (AI)', [10, 4], '/api/captions', '={{ JSON.stringify($json.generate.request) }}', { timeout: 90000, onError: 'continueRegularOutput' }),
+    code('Variants Event', [11, 4], 'bot-variants-event.js'),
+    appPost('Deliver Variants', [12, 4], '/api/bot', '={{ JSON.stringify($json.event) }}', { timeout: 30000 }),
   ],
   links: [
     ['Telegram Trigger', 'Load Config'],
@@ -185,16 +172,14 @@ const telegramHub = workflow({
     ['Publish to Instagram', 'Save Result'],
     ['Save Result', 'Edit (Published)'],
     ['Is Media?', 'Get File', 0],
-    ['Is Media?', 'Usage Hint', 1],
+    ['Is Media?', 'Ask Bot', 1],
     ['Get File', 'Upload to Cloudinary'],
-    ['Upload to Cloudinary', 'Read Catalog'],
-    ['Read Catalog', 'Build Caption Request'],
-    ['Build Caption Request', 'Use AI?'],
-    ['Use AI?', 'Write Caption (AI)', 0],
-    ['Use AI?', 'Make Draft', 1],
-    ['Write Caption (AI)', 'Make Draft'],
-    ['Make Draft', 'Insert Draft'],
-    ['Insert Draft', 'Confirm Draft'],
+    ['Upload to Cloudinary', 'Media Event'],
+    ['Media Event', 'Ask Bot'],
+    ['Ask Bot', 'Needs Caption?'],
+    ['Needs Caption?', 'Write Caption (AI)', 0],
+    ['Write Caption (AI)', 'Variants Event'],
+    ['Variants Event', 'Deliver Variants'],
   ],
 });
 

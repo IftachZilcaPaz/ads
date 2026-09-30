@@ -9,12 +9,15 @@ import {
   sessionCookie,
   type AuthSecrets,
 } from './session.ts';
+import { BotEventSchema, type Bot } from './bot/bot.ts';
 import type { Store } from './store.ts';
 
 export interface ApiDeps {
   store: () => Store;
   secrets: () => AuthSecrets;
   password: () => string;
+  /** Telegram conversation, driven by n8n (Bearer API_TOKEN). */
+  bot?: () => Bot;
 }
 
 const LoginSchema = z.object({ password: z.string().min(1).max(200) });
@@ -115,7 +118,12 @@ export function createApi(deps: ApiDeps): Router {
     .add('PUT', '/api/products/:id', async ({ req, params }) =>
       json(await deps.store().saveProduct(await readJson(req, RecordSchema), params.id)),
     )
-    .add('PUT', '/api/brand', async ({ req }) => json(await deps.store().saveBrand(await readJson(req, RecordSchema))));
+    .add('PUT', '/api/brand', async ({ req }) => json(await deps.store().saveBrand(await readJson(req, RecordSchema))))
+
+    .add('POST', '/api/bot', async ({ req }) => {
+      if (!deps.bot) throw new HttpError(404, 'Not found');
+      return json(await deps.bot().handle(await readJson(req, BotEventSchema)));
+    });
 
   return router;
 }
