@@ -89,6 +89,13 @@ const ORGANIC_TTL_MIN = 180;
 const PAID_TTL_MIN = 60;
 const MAX_ORGANIC_POSTS = 25;
 
+/** Meta reports "no date" as the Unix epoch (1970); anything before 2000 means unset. */
+function metaDate(value: string | undefined): string {
+  if (!value) return '';
+  const time = Date.parse(value);
+  return Number.isFinite(time) && time >= Date.UTC(2000, 0, 1) ? localDate(new Date(time)) : '';
+}
+
 /** Meta's effective_status → our campaign status; a campaign past its stop date has ended. */
 function statusFromMeta(metaStatus: string, endDate: string, today: string): Campaign['status'] {
   if (['ARCHIVED', 'DELETED'].includes(metaStatus) || (endDate && endDate < today)) return 'ended';
@@ -268,8 +275,8 @@ export class CampaignService {
     );
     const today = localDate(this.now());
     return rows.map((r) => {
-      const start_date = r.start_time ? localDate(new Date(r.start_time)) : '';
-      const end_date = r.stop_time ? localDate(new Date(r.stop_time)) : '';
+      const start_date = metaDate(r.start_time);
+      const end_date = metaDate(r.stop_time);
       const metaStatus = r.effective_status ?? '';
       return {
         id: r.id,

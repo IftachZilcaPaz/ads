@@ -155,6 +155,7 @@ describe('importing campaigns from Meta', () => {
     data: [
       { id: '111', name: 'מבצע קיץ', objective: 'OUTCOME_LEADS', effective_status: 'ACTIVE', start_time: '2026-09-01T00:30:00+0300', stop_time: '2026-12-31T23:00:00+0200', daily_budget: '5000' },
       { id: '222', name: 'ישן', objective: 'OUTCOME_TRAFFIC', effective_status: 'PAUSED', start_time: '2026-06-01T10:00:00+0300', stop_time: '2026-07-01T10:00:00+0300' },
+      { id: '444', name: 'בלי תאריך', objective: 'OUTCOME_LEADS', effective_status: 'PAUSED', start_time: '1970-01-01T02:00:00+0200' },
       { id: '333', name: 'כבר מקושר', objective: 'OUTCOME_AWARENESS', effective_status: 'ARCHIVED' },
     ],
     paging: { cursors: { after: 'X' } },
@@ -168,6 +169,7 @@ describe('importing campaigns from Meta', () => {
     expect(list).toEqual([
       { id: '111', name: 'מבצע קיץ', status: 'active', meta_status: 'ACTIVE', objective: 'OUTCOME_LEADS', start_date: '2026-09-01', end_date: '2026-12-31', daily_budget: 50, linked_to: '' },
       expect.objectContaining({ id: '222', status: 'ended', daily_budget: null }),
+      expect.objectContaining({ id: '444', status: 'paused', start_date: '', end_date: '' }),
       expect.objectContaining({ id: '333', status: 'ended', linked_to: 'winter' }),
     ]);
   });

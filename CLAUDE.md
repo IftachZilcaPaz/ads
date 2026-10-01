@@ -89,3 +89,10 @@ TEST_DATABASE_URL=postgresql://… npx vitest run --no-file-parallelism   # DB t
 
 ## Roadmap (agreed, not started)
 See `docs/roadmap.md`: GitHub Action auto-deploy (migrate + n8n deploy on `main`), and Telegram albums → one carousel draft.
+
+### Before selling this to other businesses (owner's requirement)
+Today everything is single-tenant and configured from the CLI (`db:set`, `meta:check`, Graph API Explorer). To sell it, two things are **required**:
+1. **A settings screen for the Meta connection**: the customer enters their own `meta_app_id` / `meta_app_secret` (or connects through our app), then picks their Instagram account, Facebook page and ad account from lists (`me/accounts`, `me/adaccounts`). No CLI, no Graph API Explorer. Prefer "Login with Facebook" (OAuth) inside the app over pasting tokens; the app secret stays server-side only.
+2. **A permissions check in the UI** (the in-app version of `npm run meta:check`): which app the token belongs to, token validity and expiry, ✅/❌ per required scope (`instagram_basic`, `instagram_content_publish`, `instagram_manage_insights`, `pages_show_list`, `pages_read_engagement`, `ads_read`, `ads_management`, `business_management`), with a "reconnect" button that re-requests missing scopes. Keep the `meta:check --token` guard: never replace a token that can publish with one that can't.
+
+Also needed for multi-tenant (not yet designed): per-customer data isolation (tenant id on every table, or a database per customer), per-customer Telegram bot and n8n credentials (or moving the n8n jobs into the app), Meta App Review + Live mode for `instagram_*`/`ads_*` with Advanced Access (Development mode only works for app admins), and billing.
