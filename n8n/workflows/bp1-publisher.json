@@ -24,7 +24,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "select key, value from settings",
+        "query": "select key, value from settings where key <> 'meta_app_secret'",
         "options": {}
       },
       "name": "Load Config",

@@ -3,7 +3,7 @@ import { META_SCOPES } from '../shared/meta-scopes.ts';
 import { DomainError } from '../shared/post.ts';
 import type { Db } from './db/db.ts';
 import { GRAPH_VERSION, type Meta } from './meta.ts';
-import { exchangeAndSaveToken, inspectToken, type TokenInfo } from './meta-token.ts';
+import { exchangeAndSaveToken, inspectToken, requestAccessToken, type TokenInfo } from './meta-token.ts';
 
 /** What the browser may change; secrets are write-only and never sent back. */
 export const MetaSettingsSchema = z
@@ -208,12 +208,28 @@ export class ConnectionService {
     const s = await this.settings();
     if (!s.meta_app_id || !s.meta_app_secret) throw new DomainError('חסרים App ID ו-App Secret');
     const fetchImpl = this.deps.fetchImpl ?? fetch;
-    const qs = new URLSearchParams({ client_id: s.meta_app_id, client_secret: s.meta_app_secret, redirect_uri: redirectUri, code });
-    const res = await fetchImpl(`https://graph.facebook.com/${GRAPH_VERSION}/oauth/access_token?${qs}`);
-    const body = (await res.json().catch(() => ({}))) as { access_token?: string; error?: { message?: string } };
-    if (!body.access_token) throw new DomainError(`פייסבוק לא החזירה טוקן: ${body.error?.message ?? res.status}`);
+    const body = await requestAccessToken(fetchImpl, { client_id: s.meta_app_id, client_secret: s.meta_app_secret, redirect_uri: redirectUri, code });
+    if (!body.access_token) throw new DomainError(`פייסבוק לא החזירה טוקן: ${body.error?.message ?? 'אין תשובה'}`);
     await exchangeAndSaveToken({ db: this.deps.db, appId: s.meta_app_id, appSecret: s.meta_app_secret, token: body.access_token, fetchImpl, meta: this.deps.meta });
     await this.autoSelect();
+  }
+
+  /**
+   * Extends the current token by another ~60 days (BP4 calls this twice a month).
+   * The exchange runs here so the app secret never leaves the app: n8n only gets the result.
+   */
+  async refreshToken(): Promise<{ days: number; expires_at: number }> {
+    const s = await this.settings();
+    if (!s.access_token) throw new DomainError('אין טוקן של Meta לחדש. מתחברים ב"הגדרות"');
+    const info = await exchangeAndSaveToken({
+      db: this.deps.db,
+      appId: s.meta_app_id ?? '',
+      appSecret: s.meta_app_secret ?? '',
+      token: s.access_token,
+      fetchImpl: this.deps.fetchImpl,
+      meta: this.deps.meta,
+    });
+    return { days: info.days, expires_at: info.expires_at };
   }
 
   /** Picks the Instagram account / ad account when there is exactly one and none is set. */

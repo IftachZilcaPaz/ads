@@ -41,6 +41,28 @@ export interface SaveTokenOptions {
 }
 
 /**
+ * POSTs to Meta's token endpoint. The app secret goes in the form body, never in a URL,
+ * so it can't end up in proxy/access logs or in an error message that echoes the URL.
+ */
+export async function requestAccessToken(
+  fetchImpl: typeof fetch,
+  params: Record<string, string>,
+): Promise<{ access_token?: string; expires_in?: number; error?: { message?: string } }> {
+  let res: Response;
+  try {
+    res = await fetchImpl(`https://graph.facebook.com/${GRAPH_VERSION}/oauth/access_token`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(params),
+    });
+  } catch {
+    throw new DomainError('אין חיבור ל-Meta');
+  }
+  const body = (await res.json().catch(() => ({}))) as { access_token?: string; expires_in?: number; error?: { message?: string } };
+  return body.access_token || body.error ? body : { error: { message: `HTTP ${res.status}` } };
+}
+
+/**
  * Exchanges a short-lived user token for a ~60-day one (the same exchange BP4
  * keeps doing), refuses a token that cannot publish, and saves it.
  */
@@ -49,15 +71,13 @@ export async function exchangeAndSaveToken(opts: SaveTokenOptions): Promise<Toke
   const metaFor = opts.meta ?? ((t: string) => createMeta(t, fetchImpl));
   if (!opts.appId || !opts.appSecret) throw new DomainError('חסרים App ID ו-App Secret של אפליקציית Meta');
 
-  const qs = new URLSearchParams({
+  const body = await requestAccessToken(fetchImpl, {
     grant_type: 'fb_exchange_token',
     client_id: opts.appId,
     client_secret: opts.appSecret,
     fb_exchange_token: opts.token.trim(),
   });
-  const res = await fetchImpl(`https://graph.facebook.com/${GRAPH_VERSION}/oauth/access_token?${qs}`);
-  const body = (await res.json().catch(() => ({}))) as { access_token?: string; expires_in?: number; error?: { message?: string } };
-  if (!body.access_token) throw new DomainError(`ההחלפה לטוקן ארוך נכשלה: ${body.error?.message ?? res.status}`);
+  if (!body.access_token) throw new DomainError(`ההחלפה לטוקן ארוך נכשלה: ${body.error?.message ?? 'אין תשובה'}`);
 
   const info = await inspectToken(metaFor(body.access_token), body.access_token);
   if (info.app_id && info.app_id !== opts.appId) {

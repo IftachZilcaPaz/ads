@@ -31,17 +31,23 @@ function fakeMeta(tokens: Record<string, { scopes: string[]; app_id?: string }>,
   return { factory, calls };
 }
 
-/** Graph OAuth endpoints: code → short token, short → long token. */
+/** Graph OAuth endpoints: code → short token, short → long token. Records each call's URL and form body. */
 function fakeFetch(map: Record<string, string>) {
-  const urls: string[] = [];
-  const impl = (async (url: string) => {
-    urls.push(url);
-    const u = new URL(url);
-    const key = u.searchParams.get('code') ?? u.searchParams.get('fb_exchange_token') ?? '';
-    const token = map[key];
+  const calls: { url: string; method: string; form: URLSearchParams }[] = [];
+  const impl = (async (url: string, init?: RequestInit) => {
+    const form = new URLSearchParams(String(init?.body ?? ''));
+    calls.push({ url, method: init?.method ?? 'GET', form });
+    const token = map[form.get('code') ?? form.get('fb_exchange_token') ?? ''];
     return new Response(JSON.stringify(token ? { access_token: token, expires_in: 5_184_000 } : { error: { message: 'bad code' } }));
   }) as unknown as typeof fetch;
-  return { impl, urls };
+  return { impl, calls };
+}
+
+/** The app secret travels only in a POST body, never in a URL. */
+function expectSecretInBodyOnly(call: { url: string; method: string; form: URLSearchParams }) {
+  expect(call.method).toBe('POST');
+  expect(call.url).toBe('https://graph.facebook.com/v26.0/oauth/access_token');
+  expect(call.form.get('client_secret')).toBe(APP_SECRET);
 }
 
 let ctx: Awaited<ReturnType<typeof testDb>>;
@@ -135,7 +141,7 @@ describe('changing the Meta connection', () => {
   });
 
   it('exchanges a pasted token, refuses one that cannot publish or is from another app, and auto-picks single accounts', async () => {
-    const { impl, urls } = exchange();
+    const { impl, calls } = exchange();
     const svc = service(fakeMeta(TOKENS, OPTIONS), impl);
 
     await expect(svc.connectWithToken({ token: SHORT.bad })).rejects.toThrow(/instagram_basic.*הטוקן הקיים נשאר/);
@@ -147,12 +153,28 @@ describe('changing the Meta connection', () => {
     expect(await setting('ig_user_id')).toBe('1789');
     expect(await setting('meta_ad_account_id')).toBe('act_1'); // the only active one
     expect(status.meta.token!.scopes.every((s) => s.granted)).toBe(true);
-    expect(urls[0]).toContain(`client_id=${APP}`);
-    expect(urls[0]).toContain('grant_type=fb_exchange_token');
+    expectSecretInBodyOnly(calls[0]!);
+    expect(calls[0]!.form.get('client_id')).toBe(APP);
+    expect(calls[0]!.form.get('grant_type')).toBe('fb_exchange_token');
+  });
+
+  it('renews the current token in the app (for BP4), keeping the secret server-side', async () => {
+    const { impl, calls } = fakeFetch({ LONG_OK: 'RENEWED' });
+    await ctx.db.query(`update settings set value = 'LONG_OK' where key = 'access_token'`);
+    const svc = service(fakeMeta({ ...TOKENS, RENEWED: { scopes: ALL_SCOPES } }, OPTIONS), impl);
+
+    const res = await svc.refreshToken();
+    expect(res).toEqual({ days: 60, expires_at: 1_800_000_000 });
+    expect(JSON.stringify(res)).not.toContain(APP_SECRET);
+    expect(await setting('access_token')).toBe('RENEWED');
+    expectSecretInBodyOnly(calls[0]!);
+
+    await ctx.db.query(`delete from settings where key = 'access_token'`);
+    await expect(svc.refreshToken()).rejects.toThrow(/אין טוקן/);
   });
 
   it('runs the Facebook login: signed state, config_id or scopes, code exchange', async () => {
-    const { impl, urls } = exchange();
+    const { impl, calls } = exchange();
     let now = Date.parse('2026-10-01T10:00:00Z');
     const svc = service(fakeMeta(TOKENS, OPTIONS), impl, () => now);
     const redirect = 'https://app.example/api/connections/meta/callback';
@@ -167,8 +189,9 @@ describe('changing the Meta connection', () => {
     await expect(svc.oauthCallback('code-1', `${state}0`, redirect)).rejects.toThrow(/פג תוקף/);
     await svc.oauthCallback('code-1', state, redirect);
     expect(await setting('access_token')).toBe('LONG_OK');
-    expect(urls[0]).toContain('code=code-1');
-    expect(urls[0]).toContain(`redirect_uri=${encodeURIComponent(redirect)}`);
+    expectSecretInBodyOnly(calls[0]!);
+    expect(calls[0]!.form.get('code')).toBe('code-1');
+    expect(calls[0]!.form.get('redirect_uri')).toBe(redirect);
 
     now += 11 * 60_000; // state lives 10 minutes
     await expect(svc.oauthCallback('code-1', state, redirect)).rejects.toThrow(/פג תוקף/);

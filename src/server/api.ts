@@ -151,6 +151,8 @@ export function createApi(deps: ApiDeps): Router {
     .add('POST', '/api/connections/meta/token', async ({ req }) =>
       json(await connections().connectWithToken(await readJson(req, MetaTokenSchema))),
     )
+    // BP4 (n8n, Bearer API_TOKEN): renew the token here so the app secret never reaches n8n.
+    .add('POST', '/api/connections/meta/refresh', async () => json(await connections().refreshToken()))
     // Browser navigations (Facebook login dialog and its return), authenticated by the session cookie.
     .add('GET', '/api/connections/meta/login', async ({ req }) => {
       try {

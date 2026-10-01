@@ -23,7 +23,9 @@ const approveButtons = (src) => [
   ['❌ דחה', `=reject:{{ ${src}.id }}:{{ ${src}.approval_ref }}`],
 ];
 
-const LOAD_CONFIG = 'select key, value from settings';
+// The Meta app secret stays in the app (BP4 asks the app to renew the token),
+// so it never lands in n8n's execution history.
+const LOAD_CONFIG = "select key, value from settings where key <> 'meta_app_secret'";
 export const PUBLISH_TRIGGER = 'Every N min';
 const SAVE_RESULT_SQL = 'select id, status from finish_publish($1, $2, $3, $4, $5)';
 const SAVE_RESULT_PARAMS = "={{ [$json.id, $json.status, $json.ig_media_id || '', $json.permalink || '', $json.error || ''] }}";
@@ -91,16 +93,16 @@ const decided = "$('Decision').first().json";
 const published = "$('Publish to Instagram').first().json";
 
 
-/** Authenticated JSON POST to the app; the base URL and token come from settings. */
-const appPost = (name, pos, path, jsonBody, { timeout, onError } = {}) =>
+/** Authenticated JSON POST to the app; the base URL and token come from the config node's output. */
+const appPost = (name, pos, path, jsonBody, { timeout, onError, configNode = 'Route Update' } = {}) =>
   http(
     name,
     pos,
     {
       method: 'POST',
-      url: `={{ $('Route Update').first().json.app_url }}${path}`,
+      url: `={{ $('${configNode}').first().json.app_url }}${path}`,
       sendHeaders: true,
-      headerParameters: { parameters: [{ name: 'Authorization', value: "=Bearer {{ $('Route Update').first().json.app_api_token }}" }] },
+      headerParameters: { parameters: [{ name: 'Authorization', value: `=Bearer {{ $('${configNode}').first().json.app_api_token }}` }] },
       sendBody: true,
       specifyBody: 'json',
       jsonBody,
@@ -206,7 +208,8 @@ const watchdog = workflow({
 });
 
 // ---------------------------------------------------------------------------
-// BP 4 - Token Refresh: extends the Meta long-lived token and SAVES it.
+// BP 4 - Token Refresh: asks the app to extend the Meta long-lived token.
+// The exchange (which needs the app secret) runs in the app; n8n never sees it.
 // ---------------------------------------------------------------------------
 const tokenRefresh = workflow({
   name: 'BP 4 - Token Refresh',
@@ -216,39 +219,14 @@ const tokenRefresh = workflow({
     schedule('Twice a Month', [0, 0], { field: 'cronExpression', expression: '0 3 1,15 * *' }),
     pg('Load Config', [1, 0], LOAD_CONFIG),
     code('Prep', [2, 0], 'config-json.js'),
-    http('Exchange Token', [3, 0], {
-      url: 'https://graph.facebook.com/v26.0/oauth/access_token',
-      sendQuery: true,
-      queryParameters: {
-        parameters: [
-          { name: 'grant_type', value: 'fb_exchange_token' },
-          { name: 'client_id', value: '={{ $json.meta_app_id }}' },
-          { name: 'client_secret', value: '={{ $json.meta_app_secret }}' },
-          { name: 'fb_exchange_token', value: '={{ $json.access_token }}' },
-        ],
-      },
-      options: {},
-    }),
-    code('Token Rows', [4, 0], 'token-rows.js'),
-    pg('Save Token', [5, 0], 'insert into settings (key, value) values ($1, $2) on conflict (key) do update set value = excluded.value', {
-      params: '={{ [$json.key, $json.value] }}',
-      perItem: true,
-    }),
-    tgMessage(
-      'Notify',
-      [6, 0],
-      "={{ $('Prep').first().json.telegram_chat_id }}",
-      "=🔑 הטוקן של Meta חודש ונשמר ({{ $('Token Rows').first().json.days }} יום)",
-      { extra: { executeOnce: true } },
-    ),
+    appPost('Refresh Token', [3, 0], '/api/connections/meta/refresh', '{}', { timeout: 30000, configNode: 'Prep' }),
+    tgMessage('Notify', [4, 0], "={{ $('Prep').first().json.telegram_chat_id }}", '=🔑 הטוקן של Meta חודש ונשמר ({{ $json.days }} יום)'),
   ],
   links: [
     ['Twice a Month', 'Load Config'],
     ['Load Config', 'Prep'],
-    ['Prep', 'Exchange Token'],
-    ['Exchange Token', 'Token Rows'],
-    ['Token Rows', 'Save Token'],
-    ['Save Token', 'Notify'],
+    ['Prep', 'Refresh Token'],
+    ['Refresh Token', 'Notify'],
   ],
 });
 

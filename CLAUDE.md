@@ -39,7 +39,7 @@ Browser ──► Cloudinary (unsigned direct upload)        n8n ──► Insta
 - **Railway**: Postgres `bp-db` in the **same project as n8n**. n8n's Postgres credential uses the internal host `postgres.railway.internal:5432`; Netlify and the local CLI use `DATABASE_PUBLIC_URL` (`*.proxy.rlwy.net`) + `?sslmode=require`. Local scripts reject `*.railway.internal`.
 - **n8n**: deployed through its public API (`npm run n8n:deploy`, no Enterprise needed). Workflow ids are stable (BP1 `EMES0elQDjPxhY6Z`, BP2 `RbzKFcz4zIHRiJJl`, BP3 `sE2eyZ6EJD3PjYwY`, BP4 `tjCHfryj2pTghgZl`, BP5 `cPELz1Hlnup9oEir` = error workflow). The Telegram credential in n8n is `ReynovationSocial`. A deploy overwrites UI edits; backups go to `n8n/backups/` (gitignored).
 - **Meta**:
-  - App **"Reynovation Publisher"**, App ID `1979053692811794`, Business type, Development mode (fine, the owner is admin). This is the app the token belongs to: `meta_app_id`/`meta_app_secret` in settings must be this app, because BP4 renews the token with them. Products: Facebook Login for Business, Marketing API.
+  - App **"Reynovation Publisher"**, App ID `1979053692811794`, Business type, Development mode (fine, the owner is admin). This is the app the token belongs to: `meta_app_id`/`meta_app_secret` in settings must be this app, because the app renews the token with them (BP4 calls `POST /api/connections/meta/refresh`). Products: Facebook Login for Business, Marketing API.
   - The token is a long-lived **USER** token with `instagram_basic`, `instagram_content_publish`, `instagram_manage_insights`, `pages_show_list`, `pages_read_engagement`, `ads_read`, `ads_management`, `business_management`. Set up 2026-10-01, valid until 2026-11-30; BP4 renews it on the 1st and 15th.
   - Ad accounts the token can see: **Reynovation Ads** `act_1098596072521598` (the business account → `meta_ad_account_id`) and Iftach Zilca `act_253062559` (personal; not used).
   - A different app, **"Reynovation"** (new use-case dashboard, WhatsApp), is NOT used by this system. Ads/Instagram use cases were added there during setup by mistake and are harmless. The owner's Instagram flights bot lives in yet another app; keep it separate.
@@ -75,6 +75,7 @@ TEST_DATABASE_URL=postgresql://… npx vitest run --no-file-parallelism   # DB t
 - A Meta token belongs to the app that created it. Graph API Explorer must use **Reynovation Publisher**, and a new token must keep the Instagram scopes or publishing breaks (`meta:check --token` guards this).
 - Old-style Meta apps have **Products**, not **Use cases**.
 - PGlite boot can be slow on a busy machine; vitest `hookTimeout` is 30s.
+- **The Meta app secret never leaves the app.** It is write-only in the UI, n8n's `Load Config` excludes it (`key <> 'meta_app_secret'`) so it never lands in n8n's execution history, BP4 asks the app to renew the token, and token exchanges send it in a POST body (`requestAccessToken`), never in a URL. Tests enforce all of this.
 
 ## Conventions
 - Production-quality TypeScript, SOLID/DRY; match the surrounding style; Hebrew user-facing strings; no long dashes (— –) in generated captions.

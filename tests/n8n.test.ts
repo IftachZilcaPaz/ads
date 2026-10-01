@@ -249,11 +249,18 @@ describe('watchdog', () => {
 });
 
 describe('token refresh', () => {
-  it('persists the new token and refuses silent failures', async () => {
-    const out = await run('token-rows.js', { json: { access_token: 'NEW', expires_in: 5184000 } });
-    expect(out.map((o) => o.key)).toEqual(['access_token', 'access_token_refreshed_at']);
-    expect(out[0]).toMatchObject({ value: 'NEW', days: 60 });
-    await expect(run('token-rows.js', { json: { error: { message: 'bad' } } })).rejects.toThrow(/exchange failed/);
+  it('asks the app to renew the token; the app secret never reaches n8n', () => {
+    const bp4 = WORKFLOWS['bp4-token-refresh']!;
+    const refresh = bp4.nodes.find((n) => n.name === 'Refresh Token')!;
+    expect(String(refresh.parameters.url)).toMatch(/\/api\/connections\/meta\/refresh$/);
+    expect(JSON.stringify(refresh.parameters.headerParameters)).toContain('Bearer');
+    for (const wf of Object.values(WORKFLOWS)) {
+      const text = JSON.stringify(wf.nodes);
+      expect(text, wf.name).not.toMatch(/client_secret|\$json\.meta_app_secret/);
+      for (const n of wf.nodes.filter((x) => x.name === 'Load Config')) {
+        expect(String(n.parameters.query), wf.name).toContain("key <> 'meta_app_secret'");
+      }
+    }
   });
 });
 
