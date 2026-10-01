@@ -20,7 +20,8 @@
     "db:import-sheet": "node --experimental-transform-types --no-warnings scripts/import-sheet.ts",
     "db:set": "node --experimental-transform-types --no-warnings scripts/db-set.ts",
     "db:overdue": "node --experimental-transform-types --no-warnings scripts/db-overdue.ts",
-    "doctor": "node --experimental-transform-types --no-warnings scripts/doctor.ts"
+    "doctor": "node --experimental-transform-types --no-warnings scripts/doctor.ts",
+    "meta:check": "node --experimental-transform-types --no-warnings scripts/meta-check.ts"
   },
   "repository": {
     "type": "git",

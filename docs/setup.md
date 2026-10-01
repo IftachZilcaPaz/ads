@@ -84,11 +84,28 @@ npm run db:set                  # רשימת המפתחות (ערכים סודי
 1. `npm run db:migrate` (מוסיף את הטבלאות של תוכניות ונתונים).
 2. נתוני אינסטגרם משתמשים ב-`access_token` הקיים. הטוקן צריך הרשאת `instagram_manage_insights` (בדרך כלל כבר יש).
 3. למודעות ממומנות:
-   - מזהה חשבון המודעות (Ads Manager ← בפינה, `act_...`):
+   - מזהה חשבון המודעות: `npm run meta:check` מציג את כל החשבונות (או ב-Ads Manager, המספר שאחרי `act=` בכתובת):
      ```bash
      npm run db:set -- meta_ad_account_id act_123456789
      ```
    - הטוקן צריך גם `ads_read` (לנתונים) ו-`ads_management` (ליצירת קמפיין). אם חסרה הרשאה, הדף מציג את השגיאה של Meta עם שם ההרשאה.
+
+### טוקן של Meta: בדיקה והוספת הרשאות
+
+```bash
+npm run meta:check
+```
+מראה אם הטוקן תקף ועד מתי, אילו הרשאות יש לו (✅/❌), ואת חשבונות המודעות שהוא רואה, כולל הפקודה שמגדירה את `meta_ad_account_id`.
+
+אם חסרות הרשאות, יוצרים טוקן חדש:
+1. [Graph API Explorer](https://developers.facebook.com/tools/explorer/) ← בצד ימין **Meta App**: האפליקציה שלך (אותה אחת כמו `meta_app_id`).
+2. **User or Page** ← **User Token**.
+3. **Permissions** ← להוסיף: `instagram_basic`, `instagram_content_publish`, `instagram_manage_insights`, `pages_show_list`, `pages_read_engagement`, `business_management`, `ads_read`, `ads_management`.
+4. **Generate Access Token** ← בחלון שנפתח לאשר, ולסמן את הדף, חשבון האינסטגרם וחשבון המודעות.
+5. להעתיק את הטוקן ולהריץ (הפקודה מחליפה אותו לטוקן של 60 יום, שומרת, ובודקת שוב):
+   ```bash
+   npm run meta:check -- --token <הטוקן>
+   ```
 
 ### איך ה-workflows עובדים עכשיו
 
