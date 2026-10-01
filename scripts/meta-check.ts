@@ -14,9 +14,13 @@ const NEEDED: [scope: string, why: string][] = [
   ['instagram_basic', 'פרסום ופרטי החשבון'],
   ['instagram_content_publish', 'פרסום פוסטים'],
   ['instagram_manage_insights', 'נתונים אורגניים בדף הקמפיין'],
+  ['pages_show_list', 'גישה לדף שמחובר לאינסטגרם'],
   ['ads_read', 'נתוני מודעות ממומנות'],
   ['ads_management', 'יצירת קמפיין מושהה ב-Meta'],
 ];
+
+/** Without these the publisher stops working, so a new token must keep them. */
+const REQUIRED_TO_PUBLISH = ['instagram_basic', 'instagram_content_publish', 'pages_show_list'];
 
 const tokenArg = process.argv.indexOf('--token');
 const newToken = tokenArg >= 0 ? process.argv[tokenArg + 1]?.trim() : undefined;
@@ -45,6 +49,17 @@ try {
     const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/oauth/access_token?${qs}`);
     const body = (await res.json()) as { access_token?: string; expires_in?: number; error?: { message?: string } };
     if (!body.access_token) fail(`ההחלפה נכשלה: ${body.error?.message ?? res.status}`);
+
+    // Never replace a working token with one that cannot publish.
+    const probe = createMeta(body.access_token);
+    const { data: next } = await probe.get<{ data: { scopes?: string[] } }>('debug_token', { input_token: body.access_token });
+    const lost = REQUIRED_TO_PUBLISH.filter((scope) => !(next.scopes ?? []).includes(scope));
+    if (lost.length && !process.argv.includes('--force')) {
+      fail(
+        `הטוקן החדש חסר הרשאות פרסום: ${lost.join(', ')}. לא שמרתי אותו (הטוקן הקיים נשאר).\n` +
+          '  הוסף אותן ב-Graph API Explorer וצור טוקן שוב. (--force שומר בכל זאת)',
+      );
+    }
     for (const [key, value] of [
       ['access_token', body.access_token],
       ['access_token_refreshed_at', new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' }).slice(0, 16)],
