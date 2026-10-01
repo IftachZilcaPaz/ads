@@ -75,10 +75,12 @@ try {
 
   // Works for user and system-user tokens inspecting themselves.
   const { data: info } = await meta.get<{
-    data: { type?: string; is_valid?: boolean; expires_at?: number; data_access_expires_at?: number; scopes?: string[] };
+    data: { type?: string; is_valid?: boolean; expires_at?: number; app_id?: string; application?: string; scopes?: string[] };
   }>('debug_token', { input_token: settings.access_token });
 
   console.log(`\nToken: ${info.is_valid ? '✅ valid' : '❌ NOT valid'} (${info.type ?? '?'})`);
+  const sameApp = !settings.meta_app_id || settings.meta_app_id === info.app_id;
+  console.log(`  app: ${info.application ?? '?'} (${info.app_id ?? '?'})${sameApp ? '' : `  ⚠️ meta_app_id in settings is ${settings.meta_app_id}: BP 4 renews with the wrong app`}`);
   if (info.expires_at) console.log(`  expires: ${new Date(info.expires_at * 1000).toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' })}`);
   else console.log('  expires: never (or long-lived page/system token)');
 
