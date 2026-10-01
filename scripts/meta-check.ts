@@ -88,13 +88,13 @@ try {
       console.log(`\n  To use the first one:\n    npm run db:set -- meta_ad_account_id ${accounts[0]!.id}`);
     }
   } catch (err) {
-    console.log(`  ⚠️ ${(err as Error).message}`);
+    console.log(scopes.has('ads_read') ? `  ⚠️ ${(err as Error).message}` : '  (needs ads_read - add it first, then run this again)');
   }
 
   if (missing.length) {
     console.log(`\nMissing: ${missing.join(', ')}`);
-    console.log('Create a new token with them (see docs/setup.md → "טוקן של Meta") and save it:');
-    console.log('  npm run db:set -- access_token <new token>');
+    console.log('Create a new token with them in Graph API Explorer (docs/setup.md → "טוקן של Meta"), then:');
+    console.log('  npm run meta:check -- --token <new token>');
   }
 } catch (err) {
   fail(err instanceof Error ? err.message : String(err));
