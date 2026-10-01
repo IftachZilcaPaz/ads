@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AdsPlanSchema, PlannedPostSchema, type AdObjective, type AdsPlan } from '../shared/campaign-plan.ts';
+import { AdsPlanSchema, OBJECTIVE_LABEL, PlannedPostSchema, type AdObjective, type AdsPlan } from '../shared/campaign-plan.ts';
 import { CampaignSchema, parseEntity, type Campaign } from '../shared/catalog.ts';
 import { composeCaption } from '../shared/captions.ts';
 import { DomainError, toPost, type Post } from '../shared/post.ts';
@@ -10,6 +10,7 @@ import type { Meta } from './meta.ts';
 import type { Store } from './store.ts';
 
 export const ApplyPostsSchema = z.object({ posts: z.array(PlannedPostSchema).min(1).max(30) });
+export const ImportMetaSchema = z.object({ ids: z.array(z.string().regex(/^\d{1,30}$/)).min(1).max(50) });
 export const SavePlanSchema = z.object({ summary: z.string().max(4000).default(''), ads: AdsPlanSchema.nullable() });
 
 export interface SavedPlan {
@@ -49,6 +50,19 @@ export interface CampaignInsights {
   paid: PaidStats | { error: string } | null;
 }
 
+export interface MetaCampaignSummary {
+  id: string;
+  name: string;
+  status: Campaign['status'];
+  meta_status: string;
+  objective: string;
+  start_date: string;
+  end_date: string;
+  daily_budget: number | null;
+  /** Our campaign already linked to this Meta campaign, if any. */
+  linked_to: string;
+}
+
 export interface MetaCreateResult {
   meta_campaign_id: string;
   adset_id: string;
@@ -74,6 +88,12 @@ const OPTIMIZATION: Partial<Record<AdObjective, string>> = {
 const ORGANIC_TTL_MIN = 180;
 const PAID_TTL_MIN = 60;
 const MAX_ORGANIC_POSTS = 25;
+
+/** Meta's effective_status → our campaign status; a campaign past its stop date has ended. */
+function statusFromMeta(metaStatus: string, endDate: string, today: string): Campaign['status'] {
+  if (['ARCHIVED', 'DELETED'].includes(metaStatus) || (endDate && endDate < today)) return 'ended';
+  return metaStatus === 'ACTIVE' ? 'active' : 'paused';
+}
 
 const num = (v: unknown) => {
   const n = Number(v);
@@ -155,14 +175,7 @@ export class CampaignService {
     if (campaign.meta_campaign_id) throw new DomainError('הקמפיין כבר מקושר לקמפיין ב-Meta');
     const plan = (await this.savedPlan(campaignId))?.ads;
     if (!plan) throw new DomainError('אין תוכנית מודעות שמורה. בנה תוכנית עם AI ושמור אותה קודם');
-    const s = await this.settings('access_token', 'meta_ad_account_id');
-    if (!s.access_token) throw new DomainError('חסר access_token בהגדרות');
-    const account = s.meta_ad_account_id?.replace(/^act_/, '');
-    if (!account || !/^\d+$/.test(account)) {
-      throw new DomainError('חסר מזהה חשבון מודעות: npm run db:set -- meta_ad_account_id act_123456789');
-    }
-
-    const meta = this.deps.meta(s.access_token);
+    const { meta, account } = await this.adAccount();
     const notes: string[] = [];
     const { currency = 'ILS' } = await meta.get<{ currency?: string }>(`act_${account}`, { fields: 'currency' });
     if (currency !== 'ILS') notes.push(`החשבון ב-${currency}: התקציב הוגדר כ-${plan.daily_budget_ils} ${currency} ליום. בדוק אותו לפני ההפעלה.`);
@@ -218,6 +231,86 @@ export class CampaignService {
       ads_manager_url: `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${account}&selected_campaign_ids=${created.id}`,
       notes,
     };
+  }
+
+  // ---------- import from Meta ----------
+
+  private async adAccount(): Promise<{ meta: Meta; account: string }> {
+    const s = await this.settings('access_token', 'meta_ad_account_id');
+    if (!s.access_token) throw new DomainError('חסר access_token בהגדרות');
+    const account = s.meta_ad_account_id?.replace(/^act_/, '');
+    if (!account || !/^\d+$/.test(account)) {
+      throw new DomainError('חסר מזהה חשבון מודעות: npm run db:set -- meta_ad_account_id act_123456789');
+    }
+    return { meta: this.deps.meta(s.access_token), account };
+  }
+
+  /** Campaigns in the ad account (newest first), marked with the local campaign they are linked to. */
+  async listMetaCampaigns(): Promise<MetaCampaignSummary[]> {
+    const { meta, account } = await this.adAccount();
+    type Row = { id: string; name?: string; objective?: string; effective_status?: string; start_time?: string; stop_time?: string; daily_budget?: string };
+    const rows: Row[] = [];
+    let after: string | undefined;
+    for (let page = 0; page < 5; page++) {
+      const res = await meta.get<{ data: Row[]; paging?: { cursors?: { after?: string }; next?: string } }>(`act_${account}/campaigns`, {
+        fields: 'id,name,objective,effective_status,start_time,stop_time,daily_budget',
+        limit: '100',
+        ...(after ? { after } : {}),
+      });
+      rows.push(...res.data);
+      after = res.paging?.next ? res.paging.cursors?.after : undefined;
+      if (!after) break;
+    }
+    const linked = new Map(
+      (await this.deps.db.query<{ id: string; meta_campaign_id: string }>(`select id, meta_campaign_id from campaigns where meta_campaign_id <> ''`)).map(
+        (r) => [r.meta_campaign_id, r.id],
+      ),
+    );
+    const today = localDate(this.now());
+    return rows.map((r) => {
+      const start_date = r.start_time ? localDate(new Date(r.start_time)) : '';
+      const end_date = r.stop_time ? localDate(new Date(r.stop_time)) : '';
+      const metaStatus = r.effective_status ?? '';
+      return {
+        id: r.id,
+        name: (r.name ?? r.id).trim().slice(0, 120) || r.id,
+        status: statusFromMeta(metaStatus, end_date, today),
+        meta_status: metaStatus,
+        objective: r.objective ?? '',
+        start_date,
+        end_date,
+        daily_budget: r.daily_budget ? num(r.daily_budget) / 100 : null,
+        linked_to: linked.get(r.id) ?? '',
+      };
+    });
+  }
+
+  /** Creates local campaigns for the chosen Meta campaigns, already linked. Linked ones are skipped. */
+  async importFromMeta(input: z.input<typeof ImportMetaSchema>): Promise<{ created: Campaign[]; skipped: string[] }> {
+    const { ids } = ImportMetaSchema.parse(input);
+    const available = new Map((await this.listMetaCampaigns()).map((c) => [c.id, c]));
+    const created: Campaign[] = [];
+    const skipped: string[] = [];
+    for (const id of new Set(ids)) {
+      const source = available.get(id);
+      if (!source || source.linked_to) {
+        skipped.push(id);
+        continue;
+      }
+      const objective = OBJECTIVE_LABEL[source.objective as AdObjective];
+      created.push(
+        await this.deps.store.saveCampaign({
+          name: source.name,
+          status: source.status,
+          start_date: source.start_date,
+          end_date: source.end_date,
+          goal: objective ? `מטרת הקמפיין ב-Meta: ${objective}` : '',
+          notes: 'יובא מ-Meta Ads',
+          meta_campaign_id: source.id,
+        }),
+      );
+    }
+    return { created, skipped };
   }
 
   // ---------- insights ----------

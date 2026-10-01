@@ -150,6 +150,55 @@ describe('creating the campaign in Meta', () => {
   });
 });
 
+describe('importing campaigns from Meta', () => {
+  const LIST = {
+    data: [
+      { id: '111', name: 'מבצע קיץ', objective: 'OUTCOME_LEADS', effective_status: 'ACTIVE', start_time: '2026-09-01T00:30:00+0300', stop_time: '2026-12-31T23:00:00+0200', daily_budget: '5000' },
+      { id: '222', name: 'ישן', objective: 'OUTCOME_TRAFFIC', effective_status: 'PAUSED', start_time: '2026-06-01T10:00:00+0300', stop_time: '2026-07-01T10:00:00+0300' },
+      { id: '333', name: 'כבר מקושר', objective: 'OUTCOME_AWARENESS', effective_status: 'ARCHIVED' },
+    ],
+    paging: { cursors: { after: 'X' } },
+  };
+
+  it('lists the ad account campaigns with status, dates, budget and links', async () => {
+    await ctx.db.query(`update campaigns set meta_campaign_id = '333' where id = 'winter'`);
+    const { meta, calls } = fakeMeta({ 'GET act_777/campaigns': LIST });
+    const list = await service(meta).listMetaCampaigns();
+    expect(calls[0]!.params).toMatchObject({ limit: '100' });
+    expect(list).toEqual([
+      { id: '111', name: 'מבצע קיץ', status: 'active', meta_status: 'ACTIVE', objective: 'OUTCOME_LEADS', start_date: '2026-09-01', end_date: '2026-12-31', daily_budget: 50, linked_to: '' },
+      expect.objectContaining({ id: '222', status: 'ended', daily_budget: null }),
+      expect.objectContaining({ id: '333', status: 'ended', linked_to: 'winter' }),
+    ]);
+  });
+
+  it('follows pagination', async () => {
+    let page = 0;
+    const { meta } = fakeMeta({
+      'GET act_777/campaigns': (params: Record<string, unknown>) => {
+        page++;
+        return params.after ? { data: [{ id: '9', name: 'שני' }] } : { data: [{ id: '8', name: 'ראשון' }], paging: { cursors: { after: 'C1' }, next: 'https://next' } };
+      },
+    });
+    expect((await service(meta).listMetaCampaigns()).map((c) => c.id)).toEqual(['8', '9']);
+    expect(page).toBe(2);
+  });
+
+  it('creates linked campaigns and skips linked or unknown ones', async () => {
+    await ctx.db.query(`update campaigns set meta_campaign_id = '333' where id = 'winter'`);
+    const { meta } = fakeMeta({ 'GET act_777/campaigns': LIST });
+    const svc = service(meta);
+    const result = await svc.importFromMeta({ ids: ['111', '333', '999'] });
+    expect(result.skipped).toEqual(['333', '999']);
+    expect(result.created).toHaveLength(1);
+    expect(result.created[0]).toMatchObject({ name: 'מבצע קיץ', status: 'active', start_date: '2026-09-01', meta_campaign_id: '111' });
+    expect(result.created[0]!.goal).toContain('לידים');
+    expect(result.created[0]!.id).toMatch(/^c-/);
+    // A second import of the same campaign is now skipped.
+    expect((await svc.importFromMeta({ ids: ['111'] })).skipped).toEqual(['111']);
+  });
+});
+
 describe('campaign insights', () => {
   beforeEach(async () => {
     await insertRows(ctx.db, 'posts', [

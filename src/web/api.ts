@@ -1,11 +1,11 @@
 import type { Brand, Campaign, Product } from '../shared/catalog.ts';
 import type { AdsPlan, PlanRequest, PlanResult, PlannedPost } from '../shared/campaign-plan.ts';
 import type { CaptionRequest, CaptionResult } from '../shared/captions.ts';
-import type { CampaignInsights, MetaCreateResult, SavedPlan } from '../server/campaigns.ts';
+import type { CampaignInsights, MetaCampaignSummary, MetaCreateResult, SavedPlan } from '../server/campaigns.ts';
 import type { NewPostInput, Post, PostAction, PostChanges } from '../shared/post.ts';
 import type { PublicSettings, Snapshot } from '../server/store.ts';
 
-export type { Snapshot, PublicSettings, CampaignInsights, MetaCreateResult, SavedPlan };
+export type { Snapshot, PublicSettings, CampaignInsights, MetaCampaignSummary, MetaCreateResult, SavedPlan };
 
 export class ApiError extends Error {
   constructor(
@@ -77,6 +77,9 @@ export const api = {
   saveAdsPlan: (id: string, summary: string, ads: AdsPlan | null) =>
     request<SavedPlan>('PUT', `/api/campaigns/${enc(id)}/plan`, { summary, ads }),
   createInMeta: (id: string) => request<MetaCreateResult>('POST', `/api/campaigns/${enc(id)}/meta`),
+  metaCampaigns: () => request<MetaCampaignSummary[]>('GET', '/api/meta/campaigns'),
+  importMetaCampaigns: (ids: string[]) =>
+    request<{ created: Campaign[]; skipped: string[] }>('POST', '/api/meta/campaigns/import', { ids }),
 };
 
 /** Reads the NDJSON event stream of an AI edge function until its result. */

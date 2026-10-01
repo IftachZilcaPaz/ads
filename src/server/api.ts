@@ -10,7 +10,7 @@ import {
   type AuthSecrets,
 } from './session.ts';
 import { BotEventSchema, type Bot } from './bot/bot.ts';
-import { ApplyPostsSchema, SavePlanSchema, type CampaignService } from './campaigns.ts';
+import { ApplyPostsSchema, ImportMetaSchema, SavePlanSchema, type CampaignService } from './campaigns.ts';
 import type { Store } from './store.ts';
 
 export interface ApiDeps {
@@ -127,6 +127,10 @@ export function createApi(deps: ApiDeps): Router {
     )
     .add('PUT', '/api/brand', async ({ req }) => json(await deps.store().saveBrand(await readJson(req, RecordSchema))))
 
+    .add('GET', '/api/meta/campaigns', async () => json(await campaigns().listMetaCampaigns()))
+    .add('POST', '/api/meta/campaigns/import', async ({ req }) =>
+      json(await campaigns().importFromMeta(await readJson(req, ImportMetaSchema)), { status: 201 }),
+    )
     .add('GET', '/api/campaigns/:id/insights', async ({ req, params }) =>
       json(await campaigns().insights(params.id!, new URL(req.url).searchParams.has('refresh'))),
     )

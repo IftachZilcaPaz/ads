@@ -11,6 +11,7 @@ import { localDate } from '../../shared/time.ts';
 import { api } from '../api.ts';
 import { CAMPAIGN_FIELDS, PRODUCT_FIELDS, blank, type Row } from '../catalog-fields.ts';
 import { EntityForm } from '../components/EntityForm.tsx';
+import { MetaImport } from '../components/MetaImport.tsx';
 import { Modal } from '../components/Modal.tsx';
 import { useApp } from '../state.tsx';
 import { BUCKET_META, cx } from '../ui.ts';
@@ -22,6 +23,7 @@ export function Library() {
   const { data, run, upsertCampaign, upsertProduct } = useApp();
   const [tab, setTab] = useState<Tab>('campaigns');
   const [editing, setEditing] = useState<Row | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const counts = useMemo(() => {
     const map = new Map<string, Partial<Record<Bucket, number>>>();
@@ -73,15 +75,22 @@ export function Library() {
             🏷 מוצרים ({data.products.length})
           </button>
         </div>
-        <button type="button" class="primary" onClick={() => setEditing(blank(isCampaigns ? CAMPAIGN_COLUMNS : PRODUCT_COLUMNS))}>
-          + {isCampaigns ? 'קמפיין' : 'מוצר'} חדש
-        </button>
+        <div class="row wrap">
+          {isCampaigns && (
+            <button type="button" onClick={() => setImporting(true)}>
+              ⬇ ייבוא מ-Meta
+            </button>
+          )}
+          <button type="button" class="primary" onClick={() => setEditing(blank(isCampaigns ? CAMPAIGN_COLUMNS : PRODUCT_COLUMNS))}>
+            + {isCampaigns ? 'קמפיין' : 'מוצר'} חדש
+          </button>
+        </div>
       </div>
 
       {!items.length && (
         <p class="empty big">
           {isCampaigns
-            ? 'עוד אין קמפיינים. קמפיין נותן ל-AI הקשר: מטרה, מסר, הצעה והאשטגים.'
+            ? 'עוד אין קמפיינים. קמפיין נותן ל-AI הקשר: מטרה, מסר, הצעה והאשטגים. אפשר ליצור חדש או לייבא מ-Meta.'
             : 'עוד אין מוצרים. מוצר עם תיאור ויתרונות עוזר ל-AI לכתוב בדיוק על מה שבתמונה.'}
         </p>
       )}
@@ -128,6 +137,8 @@ export function Library() {
           );
         })}
       </div>
+
+      {importing && <MetaImport onClose={() => setImporting(false)} />}
 
       {editing && (
         <Modal

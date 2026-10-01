@@ -7,6 +7,7 @@ Instagram publishing system for the owner's business (Reynovation). The owner wr
 - **Core rule: nothing publishes without approval.** Approval = `approved_at` set, or `approval_mode='auto'`. Editing caption/media/type revokes approval; moving the time does not.
 - **n8n** (on Railway): publishes on time, asks for approval in Telegram, nightly watchdog, Meta token refresh, error alerts.
 - **Telegram bot**: send a photo/video → the app runs a Q&A: post or story → campaign → product → brief → 3 AI variants → when → preview → approve. A story skips the caption questions.
+- **Import from Meta** (campaigns tab): lists the ad account's campaigns and creates the picked ones locally, already linked (`meta_campaign_id`).
 - **Campaign page** (`#/campaign?id=…`): board status, organic Instagram insights per published post, paid Meta Ads insights, and "build with AI": an organic post plan (→ drafts) plus a Meta ads plan (→ a **PAUSED** campaign + ad set in Meta; ads themselves are added in Ads Manager).
 
 ## Architecture
