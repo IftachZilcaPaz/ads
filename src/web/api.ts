@@ -59,6 +59,7 @@ export const api = {
   duplicate: (id: string) => request<Post>('POST', `/api/posts/${enc(id)}/duplicate`),
   bulk: (ids: string[], action: PostAction) =>
     request<{ updated: Post[]; failed: { id: string; error: string }[] }>('POST', '/api/posts-bulk', { ids, action }),
+  deletePosts: (ids: string[]) => request<{ deleted: string[]; failed: { id: string; error: string }[] }>('POST', '/api/posts-bulk/delete', { ids }),
 
   saveCampaign: (c: Partial<Campaign>, id?: string) =>
     id ? request<Campaign>('PUT', `/api/campaigns/${enc(id)}`, c) : request<Campaign>('POST', '/api/campaigns', c),

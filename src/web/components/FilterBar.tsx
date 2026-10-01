@@ -1,12 +1,15 @@
+import type { ComponentChildren } from 'preact';
 import type { PostFilter } from '../hooks.ts';
 import { useApp } from '../state.tsx';
 
 interface Props {
   filter: PostFilter;
   onChange: (f: PostFilter) => void;
+  /** Extra controls at the end of the row (e.g. the board's "select" toggle). */
+  children?: ComponentChildren;
 }
 
-export function FilterBar({ filter, onChange }: Props) {
+export function FilterBar({ filter, onChange, children }: Props) {
   const { data } = useApp();
   if (!data) return null;
   return (
@@ -37,6 +40,7 @@ export function FilterBar({ filter, onChange }: Props) {
           ))}
         </select>
       )}
+      {children}
     </div>
   );
 }

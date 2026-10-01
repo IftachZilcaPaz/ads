@@ -15,6 +15,7 @@ import {
   DomainError,
   POST_COLUMNS,
   applyEdit,
+  canDelete,
   createPost,
   toPost,
   transition,
@@ -140,6 +141,27 @@ export class Store {
         }
       }
       return { updated, failed };
+    });
+  }
+
+  /**
+   * Permanently deletes posts in one transaction. A post mid-publish is refused;
+   * one that is already gone counts as deleted, so a retry is harmless.
+   */
+  deletePosts(ids: string[]): Promise<{ deleted: string[]; failed: { id: string; error: string }[] }> {
+    return this.db.tx(async (t) => {
+      const deleted: string[] = [];
+      const failed: { id: string; error: string }[] = [];
+      for (const id of new Set(ids)) {
+        const [row] = await t.query<{ status: string }>('select status from posts where id = $1 for update', [id]);
+        if (row && !canDelete(row)) {
+          failed.push({ id, error: 'הפוסט באמצע פרסום' });
+          continue;
+        }
+        if (row) await t.query('delete from posts where id = $1', [id]);
+        deleted.push(id);
+      }
+      return { deleted, failed };
     });
   }
 

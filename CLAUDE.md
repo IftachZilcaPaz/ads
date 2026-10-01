@@ -3,7 +3,7 @@
 Instagram publishing system for the owner's business (Reynovation). The owner writes in Hebrew, so reply in Hebrew. All UI text is Hebrew/RTL. This repo is **public**: never commit secrets, tokens, the spreadsheet id or the Telegram chat id.
 
 ## What it does
-- **Board app** (Netlify): kanban (טיוטות → ממתין לאישור שלי → מאושר ומתוזמן → פורסם / נכשל-נדחה), calendar, studio (upload media + Claude captions), campaigns & products library, a **campaign page** (stats + AI campaign builder), brand voice. Installable as a PWA.
+- **Board app** (Netlify): kanban (טיוטות → ממתין לאישור שלי → מאושר ומתוזמן → פורסם / נכשל-נדחה) with a multi-select mode (approve / back to drafts / archive / permanent delete via `POST /api/posts-bulk` and `/api/posts-bulk/delete`; a post mid-publish is never deleted), calendar, studio (upload media + Claude captions), campaigns & products library, a **campaign page** (stats + AI campaign builder), brand voice. Installable as a PWA.
 - **Core rule: nothing publishes without approval.** Approval = `approved_at` set, or `approval_mode='auto'`. Editing caption/media/type revokes approval; moving the time does not.
 - **n8n** (on Railway): publishes on time, asks for approval in Telegram, nightly watchdog, Meta token refresh, error alerts.
 - **Telegram bot**: send a photo/video → the app runs a Q&A: post or story → campaign → product → brief → 3 AI variants → when → preview → approve. A story skips the caption questions.

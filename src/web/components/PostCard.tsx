@@ -8,11 +8,13 @@ interface Props {
   post: Post;
   onOpen: (post: Post) => void;
   onAction: (post: Post, action: PostAction) => void;
+  /** Selection mode: a click toggles the card instead of opening it, and dragging is off. */
+  selection?: { selected: boolean; onToggle: (post: Post) => void };
 }
 
 const DROPPABLE: Bucket[] = ['draft', 'awaiting', 'approved'];
 
-export function PostCard({ post, onOpen, onAction }: Props) {
+export function PostCard({ post, onOpen, onAction, selection }: Props) {
   const { data, holdRefresh } = useApp();
   const ref = useRef<HTMLDivElement>(null);
   const bucket = bucketOf(post)!;
@@ -23,7 +25,7 @@ export function PostCard({ post, onOpen, onAction }: Props) {
   const product = data?.products.find((p) => p.id === post.product_id);
 
   useEffect(() => {
-    if (!movable || !ref.current) return;
+    if (!movable || selection || !ref.current) return;
     return attachDrag<Bucket>(ref.current, {
       source: bucket,
       canDrop: (target) => DROPPABLE.includes(target) && target !== bucket,
@@ -33,18 +35,25 @@ export function PostCard({ post, onOpen, onAction }: Props) {
       },
       onActive: holdRefresh,
     });
-  }, [post, bucket, movable, onAction, holdRefresh]);
+  }, [post, bucket, movable, onAction, holdRefresh, !!selection]);
 
   const overdue = (bucket === 'awaiting' || bucket === 'approved') && isOverdue(post.publish_at);
+  const activate = () => (selection ? selection.onToggle(post) : onOpen(post));
 
   return (
     <div
       ref={ref}
-      class={cx('card', movable && 'movable')}
-      onClick={() => onOpen(post)}
-      role="button"
+      class={cx('card', movable && !selection && 'movable', selection && 'selectable', selection?.selected && 'selected')}
+      onClick={activate}
+      role={selection ? 'checkbox' : 'button'}
+      aria-checked={selection ? selection.selected : undefined}
       tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && onOpen(post)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || (selection && e.key === ' ')) {
+          e.preventDefault();
+          activate();
+        }
+      }}
     >
       {first && (
         <div class="thumb">
@@ -54,6 +63,7 @@ export function PostCard({ post, onOpen, onAction }: Props) {
         </div>
       )}
       <div class="meta">
+        {selection && <span class="check" aria-hidden="true">{selection.selected ? '✓' : ''}</span>}
         <span class="badge">{TYPE_LABEL[post.type as PostType] ?? post.type}</span>
         {post.approval_mode === 'auto' && <span class="badge accent">אישור קבוע</span>}
         {post.status === 'pending_approval' && <span class="badge warn">בטלגרם</span>}
@@ -68,6 +78,7 @@ export function PostCard({ post, onOpen, onAction }: Props) {
       {post.caption && <div class="cap">{post.caption}</div>}
       {post.error && bucket === 'problem' && <div class="err">{post.error}</div>}
 
+      {!selection && (
       <div class="card-actions">
         {bucket === 'draft' && (
           <button type="button" onClick={(e) => (e.stopPropagation(), onAction(post, 'submit'))}>
@@ -90,6 +101,7 @@ export function PostCard({ post, onOpen, onAction }: Props) {
           </a>
         )}
       </div>
+      )}
     </div>
   );
 }

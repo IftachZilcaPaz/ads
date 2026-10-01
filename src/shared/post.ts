@@ -234,6 +234,11 @@ export function applyEdit(post: Post, changes: PostChanges, now: Date = new Date
   return next;
 }
 
+/** Anything but a post mid-publish can be deleted (a published one stays on Instagram). */
+export function canDelete(post: Pick<Post, 'status'>): boolean {
+  return post.status !== 'publishing';
+}
+
 export const POST_ACTIONS = ['submit', 'approve', 'unapprove', 'draft', 'archive'] as const;
 export type PostAction = (typeof POST_ACTIONS)[number];
 

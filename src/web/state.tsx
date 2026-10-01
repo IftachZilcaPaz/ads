@@ -15,6 +15,7 @@ interface AppState {
   loadError: string | null;
   reload: () => Promise<void>;
   upsertPost: (post: Post) => void;
+  removePosts: (ids: string[]) => void;
   upsertCampaign: (c: Campaign, previousId?: string) => void;
   upsertProduct: (p: Product, previousId?: string) => void;
   setBrand: (b: Brand) => void;
@@ -107,6 +108,10 @@ export function AppProvider({ children }: { children: ComponentChildren }) {
       toast,
       run,
       upsertPost: (post) => setData((d) => d && { ...d, posts: upsert(d.posts, post, (p) => p.id) }),
+      removePosts: (ids) => {
+        const gone = new Set(ids);
+        setData((d) => d && { ...d, posts: d.posts.filter((p) => !gone.has(p.id)) });
+      },
       upsertCampaign: (c, prev) => setData((d) => d && { ...d, campaigns: upsert(d.campaigns, c, (x) => x.id, prev ?? c.id) }),
       upsertProduct: (p, prev) => setData((d) => d && { ...d, products: upsert(d.products, p, (x) => x.id, prev ?? p.id) }),
       setBrand: (brand) => setData((d) => d && { ...d, brand }),

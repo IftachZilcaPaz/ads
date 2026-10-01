@@ -84,6 +84,17 @@ describe('Store', () => {
     expect(res.failed.map((f) => f.id)).toEqual(['bad-1', 'missing']);
   });
 
+  it('deletes posts permanently, except one mid-publish; a missing one counts as deleted', async () => {
+    await store.createPost({ id: 'del-1' });
+    await ctx.db.query(`update posts set status = 'publishing' where id = 'old-2'`);
+    const res = await store.deletePosts(['del-1', 'old-2', 'missing', 'del-1']);
+    expect(res.deleted).toEqual(['del-1', 'missing']);
+    expect(res.failed).toEqual([{ id: 'old-2', error: 'הפוסט באמצע פרסום' }]);
+    const ids = (await store.snapshot()).posts.map((p) => p.id);
+    expect(ids).not.toContain('del-1');
+    expect(ids).toContain('old-2');
+  });
+
   it('duplicates a post as a new draft', async () => {
     const copy = await store.duplicatePost('old-2');
     expect(copy).toMatchObject({ status: 'draft', caption: 'published one', ig_media_id: '' });
@@ -199,6 +210,18 @@ describe('API router', () => {
     expect((await cannot.json()).details.length).toBeGreaterThan(0);
     const missing = await api.handle(new Request(url('/api/posts/nope/approve'), { method: 'POST', headers }));
     expect(missing.status).toBe(404);
+  });
+
+  it('bulk-deletes through the API and validates the ids', async () => {
+    const headers = { authorization: 'Bearer automation-token', 'content-type': 'application/json' };
+    await store.createPost({ id: 'del-api' });
+    const del = (body: unknown) => api.handle(new Request(url('/api/posts-bulk/delete'), { method: 'POST', headers, body: JSON.stringify(body) }));
+    expect((await del({ ids: [] })).status).toBe(400);
+    const res = await del({ ids: ['del-api'] });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ deleted: ['del-api'], failed: [] });
+    const unauth = await api.handle(new Request(url('/api/posts-bulk/delete'), { method: 'POST', body: '{"ids":["old-1"]}' }));
+    expect(unauth.status).toBe(401);
   });
 });
 

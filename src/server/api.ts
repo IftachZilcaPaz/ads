@@ -40,10 +40,9 @@ const NewPostSchema = PostChangesSchema.extend({
   id: z.string().max(40).optional(),
   intent: z.enum(['draft', 'submit', 'approve']).optional(),
 }).strict();
-const BulkSchema = z.object({
-  ids: z.array(z.string().min(1)).min(1).max(200),
-  action: z.enum(POST_ACTIONS),
-});
+const IdsSchema = z.array(z.string().min(1).max(100)).min(1).max(200);
+const BulkSchema = z.object({ ids: IdsSchema, action: z.enum(POST_ACTIONS) });
+const BulkDeleteSchema = z.object({ ids: IdsSchema });
 const RecordSchema = z.record(z.string(), z.unknown());
 
 /** Naive per-instance brute-force brake; the password should still be strong. */
@@ -123,6 +122,10 @@ export function createApi(deps: ApiDeps): Router {
     .add('POST', '/api/posts-bulk', async ({ req }) => {
       const { ids, action } = await readJson(req, BulkSchema);
       return json(await deps.store().bulkAct(ids, action));
+    })
+    .add('POST', '/api/posts-bulk/delete', async ({ req }) => {
+      const { ids } = await readJson(req, BulkDeleteSchema);
+      return json(await deps.store().deletePosts(ids));
     })
 
     .add('POST', '/api/campaigns', async ({ req }) =>
