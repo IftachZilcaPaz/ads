@@ -1,6 +1,7 @@
 import { createApi } from './api.ts';
 import { Bot } from './bot/bot.ts';
 import { createTelegram } from './bot/telegram.ts';
+import { AnalyticsService } from './analytics.ts';
 import { CampaignService } from './campaigns.ts';
 import { ConnectionService } from './connections.ts';
 import type { Db } from './db/db.ts';
@@ -40,6 +41,7 @@ export const api = createApi({
   password: () => requireEnv('APP_PASSWORD'),
   bot: getBot,
   campaigns: () => new CampaignService({ db: getDb(), store: getStore(), meta: (token) => createMeta(token) }),
+  analytics: () => new AnalyticsService({ db: getDb(), meta: (token) => createMeta(token) }),
   connections: () =>
     new ConnectionService({
       db: getDb(),

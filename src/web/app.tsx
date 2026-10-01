@@ -6,6 +6,7 @@ import { AppProvider, useApp } from './state.tsx';
 import { Icon, type IconName } from './icons.tsx';
 import { cx, greeting } from './ui.ts';
 import { Board } from './views/Board.tsx';
+import { AnalyticsView } from './views/AnalyticsView.tsx';
 import { BrandView } from './views/BrandView.tsx';
 import { Calendar } from './views/Calendar.tsx';
 import { CampaignView } from './views/CampaignView.tsx';
@@ -19,6 +20,7 @@ const NAV: { route: Route; label: string; icon: IconName }[] = [
   { route: 'calendar', label: 'יומן', icon: 'calendar' },
   { route: 'studio', label: 'סטודיו', icon: 'sparkles' },
   { route: 'library', label: 'קמפיינים ומוצרים', icon: 'megaphone' },
+  { route: 'analytics', label: 'ניתוחים', icon: 'chart' },
   { route: 'brand', label: 'מותג', icon: 'mic' },
   { route: 'settings', label: 'הגדרות', icon: 'settings' },
 ];
@@ -123,6 +125,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
         {data && route === 'studio' && <Studio query={query} />}
         {data && route === 'library' && <Library />}
         {data && route === 'campaign' && <CampaignView id={query.get('id') ?? ''} />}
+        {data && route === 'analytics' && <AnalyticsView />}
         {data && route === 'brand' && <BrandView />}
         {data && route === 'settings' && <SettingsView query={query} />}
       </main>

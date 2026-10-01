@@ -27,7 +27,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - name: Database tests against real Postgres
-        run: npx vitest run --no-file-parallelism tests/db.test.ts tests/server.test.ts tests/import.test.ts tests/bot.test.ts tests/campaigns.test.ts tests/connections.test.ts
+        run: npx vitest run --no-file-parallelism tests/db.test.ts tests/server.test.ts tests/import.test.ts tests/bot.test.ts tests/campaigns.test.ts tests/connections.test.ts tests/analytics.test.ts
         env:
           TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/bp_test
           DATABASE_SSL: disable

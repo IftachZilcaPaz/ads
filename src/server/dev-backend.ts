@@ -8,6 +8,7 @@
 import { createApi } from './api.ts';
 import { defaultCaptionDeps, handleCaptionRequest } from './captions-handler.ts';
 import { handlePlanRequest } from './plan-service.ts';
+import { AnalyticsService, handleAnalyzeRequest } from './analytics.ts';
 import { CampaignService } from './campaigns.ts';
 import { ConnectionService } from './connections.ts';
 import { createMeta } from './meta.ts';
@@ -64,6 +65,7 @@ export async function createDevBackend(): Promise<(req: Request) => Promise<Resp
     secrets: () => ({ sessionSecret: process.env.SESSION_SECRET!, apiToken: process.env.API_TOKEN }),
     password: () => process.env.APP_PASSWORD ?? 'dev',
     campaigns: () => new CampaignService({ db, store, meta: (token) => createMeta(token) }),
+    analytics: () => new AnalyticsService({ db, meta: (token) => createMeta(token) }),
     connections: () =>
       new ConnectionService({
         db,
@@ -139,12 +141,40 @@ export async function createDevBackend(): Promise<(req: Request) => Promise<Resp
     return new Response(body, { headers: { 'content-type': 'application/x-ndjson' } });
   };
 
+  const cannedAnalysis = async (): Promise<Response> => {
+    const body = new ReadableStream<Uint8Array>({
+      async start(c) {
+        const send = (e: unknown) => c.enqueue(new TextEncoder().encode(`${JSON.stringify(e)}\n`));
+        send({ type: 'progress', chars: 0 });
+        await new Promise((r) => setTimeout(r, 900));
+        send({
+          type: 'result',
+          data: {
+            headline: 'הרילים מביאים פי 2.5 מעורבות מהפוסטים: כדאי להעביר אליהם את רוב התוכן.',
+            insights: [
+              { title: 'ריל מנצח', detail: 'שיעור מעורבות ממוצע 6.1% בריל מול 2.4% בפוסט רגיל, על 4 ו-3 פוסטים.' },
+              { title: 'ערב עדיף', detail: 'פוסטים בין 19:00 ל-23:00 הגיעו ל-5.2% בממוצע, כמעט כפול מהבוקר.' },
+            ],
+            recommendations: [
+              { title: '2 רילים בשבוע', detail: 'לפני/אחרי של פרויקט, 15-20 שניות, בימי ראשון וחמישי בערב.' },
+              { title: 'לשכפל את המוביל', detail: 'הפוסט עם השאלה לקהל קיבל הכי הרבה תגובות. לחזור על הפורמט פעם בשבועיים.' },
+            ],
+            caveats: 'יש מעט פוסטים בכל יום בשבוע, אז ההשוואה בין ימים עדיין גסה.',
+          },
+        });
+        c.close();
+      },
+    });
+    return new Response(body, { headers: { 'content-type': 'application/x-ndjson' } });
+  };
+
   return (request) => {
     const path = new URL(request.url).pathname;
     if (path.startsWith('/api/captions')) {
       return process.env.ANTHROPIC_API_KEY ? handleCaptionRequest(request, defaultCaptionDeps) : cannedCaptions();
     }
     if (path.startsWith('/api/plan')) return process.env.ANTHROPIC_API_KEY ? handlePlanRequest(request) : cannedPlan(request);
+    if (path.startsWith('/api/analyze')) return process.env.ANTHROPIC_API_KEY ? handleAnalyzeRequest(request) : cannedAnalysis();
     return api.handle(request);
   };
 }

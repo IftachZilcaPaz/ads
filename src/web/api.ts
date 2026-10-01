@@ -1,3 +1,4 @@
+import type { AccountOverview, Analysis, AnalyticsPeriod, AnalyzeRequest } from '../shared/analytics.ts';
 import type { Brand, Campaign, Product } from '../shared/catalog.ts';
 import type { AdsPlan, PlanRequest, PlanResult, PlannedPost } from '../shared/campaign-plan.ts';
 import type { CaptionRequest, CaptionResult } from '../shared/captions.ts';
@@ -85,6 +86,12 @@ export const api = {
   connectMetaToken: (token: string) => request<ConnectionsStatus>('POST', '/api/connections/meta/token', { token }),
   importMetaCampaigns: (ids: string[]) =>
     request<{ created: Campaign[]; skipped: string[] }>('POST', '/api/meta/campaigns/import', { ids }),
+
+  analytics: (days: AnalyticsPeriod, refresh = false) =>
+    request<AccountOverview>('GET', `/api/analytics?days=${days}${refresh ? '&refresh=1' : ''}`),
+  /** Streams Claude's reading of the account analytics. */
+  analyze: (req: AnalyzeRequest, onProgress: (chars: number) => void, signal?: AbortSignal) =>
+    streamAi<Analysis>('/api/analyze', req, onProgress, signal),
 };
 
 /** Reads the NDJSON event stream of an AI edge function until its result. */

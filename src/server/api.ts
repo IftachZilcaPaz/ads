@@ -12,6 +12,7 @@ import {
 import { BotEventSchema, type Bot } from './bot/bot.ts';
 import { ApplyPostsSchema, ImportMetaSchema, SavePlanSchema, type CampaignService } from './campaigns.ts';
 import { MetaSettingsSchema, MetaTokenSchema, type ConnectionService } from './connections.ts';
+import type { AnalyticsService } from './analytics.ts';
 import type { Store } from './store.ts';
 
 export interface ApiDeps {
@@ -24,6 +25,8 @@ export interface ApiDeps {
   campaigns?: () => CampaignService;
   /** Settings → connections (Meta login, permissions, accounts). */
   connections?: () => ConnectionService;
+  /** Instagram account analytics. */
+  analytics?: () => AnalyticsService;
 }
 
 const LoginSchema = z.object({ password: z.string().min(1).max(200) });
@@ -136,6 +139,12 @@ export function createApi(deps: ApiDeps): Router {
     )
     .add('PUT', '/api/brand', async ({ req }) => json(await deps.store().saveBrand(await readJson(req, RecordSchema))))
 
+    .add('GET', '/api/analytics', async ({ req }) => {
+      if (!deps.analytics) throw new HttpError(404, 'Not found');
+      const params = new URL(req.url).searchParams;
+      const days = params.get('days') === '7' ? 7 : 30;
+      return json(await deps.analytics().overview(days, params.has('refresh')));
+    })
     .add('GET', '/api/connections', async () => json(await connections().status()))
     .add('GET', '/api/connections/meta/options', async () => json(await connections().options()))
     .add('PUT', '/api/connections/meta', async ({ req }) => json(await connections().update(await readJson(req, MetaSettingsSchema))))

@@ -9,6 +9,7 @@ Instagram publishing system for the owner's business (Reynovation). The owner wr
 - **Telegram bot**: send a photo/video → the app runs a Q&A: post or story → campaign → product → brief → 3 AI variants → when → preview → approve. A story skips the caption questions.
 - **Settings → connections** (`#/settings`): Meta status (app, token validity/expiry, ✅/❌ per scope, Instagram account, ad account), reconnect with "Continue with Facebook" (OAuth, signed state, `config_id` for Login-for-Business apps) or by pasting an Explorer token, pickers for the Instagram/ad account, app id/secret (secret write-only), and the status of Telegram/Cloudinary/Claude/app_url. Same guard as `meta:check` (`src/server/meta-token.ts`, shared).
 - **Import from Meta** (campaigns tab): lists the ad account's campaigns and creates the picked ones locally, already linked (`meta_campaign_id`).
+- **Analytics** (`#/analytics`, nav "ניתוחים"): the whole Instagram account for 7/30 days: account totals (`{ig}/insights` `metric_type=total_value`, per-metric fallback with warnings), daily reach, every feed post since then with its insights (linked to local posts by `ig_media_id`), engagement by format/weekday/hour (`summarizePosts`, a "best" slot needs ≥2 posts), a sortable posts table, and "analyze with AI" (`/api/analyze`). Cached 60 min in `insights_cache` (`ig:overview:<days>`). Charts follow one validated accent (`--chart-accent #00959b` on `--chart-surface #f4f7fa`), gray for context; SVG drawn at the container's pixel width (`src/web/components/charts.tsx`).
 - **Campaign page** (`#/campaign?id=…`): board status, organic Instagram insights per published post, paid Meta Ads insights, and "build with AI": an organic post plan (→ drafts) plus a Meta ads plan (→ a **PAUSED** campaign + ad set in Meta; ads themselves are added in Ads Manager).
 
 ## Architecture
@@ -17,6 +18,7 @@ Browser (Preact SPA, RTL) ──► Netlify
    /api/*          Node function  (netlify/functions/api.mts → src/server/api.ts)
    /api/captions   Edge function  (streams NDJSON; Claude captions)
    /api/plan       Edge function  (streams NDJSON; Claude campaign plan)
+   /api/analyze    Edge function  (streams NDJSON; Claude reading of the analytics)
         │
         ▼
    Postgres on Railway (service "bp-db", same project as n8n)
@@ -24,8 +26,8 @@ Browser (Preact SPA, RTL) ──► Netlify
    n8n (Railway): BP1 Publisher, BP2 Telegram Hub, BP3 Watchdog, BP4 Token Refresh, BP5 Error Alert
 Browser ──► Cloudinary (unsigned direct upload)        n8n ──► Instagram Graph API / Telegram
 ```
-- `src/shared/`: domain shared by server and browser: `post.ts` (lifecycle, transitions, IG validation), `time.ts` (Israel wall-clock `YYYY-MM-DD HH:mm` as text), `catalog.ts`, `captions.ts` (prompt), `campaign-plan.ts` (plan schema + prompt), `media.ts` (`cloudinaryStill`, `igImage`).
-- `src/server/`: `store.ts` (Postgres repo, `SELECT … FOR UPDATE`), `api.ts` (routes), `session.ts` (HMAC cookie / Bearer `API_TOKEN`), `ai.ts` + `ai-handler.ts` (shared structured Claude call + NDJSON handler), `captions-*.ts`, `plan-service.ts`, `campaigns.ts` (plans, Meta create, insights + `insights_cache`), `meta.ts` (Graph client), `bot/` (Telegram conversation state machine, `bot_sessions`, CAS on `(nonce, step)`), `db/` (postgres.js, PGlite, migrator), `dev-backend.ts` (in-process PGlite + seed + canned AI when no key).
+- `src/shared/`: domain shared by server and browser: `post.ts` (lifecycle, transitions, IG validation), `time.ts` (Israel wall-clock `YYYY-MM-DD HH:mm` as text), `catalog.ts`, `captions.ts` (prompt), `campaign-plan.ts` (plan schema + prompt), `analytics.ts` (IG post types, engagement rate, format/weekday/hour summary, analysis schema + prompt), `media.ts` (`cloudinaryStill`, `igImage`).
+- `src/server/`: `store.ts` (Postgres repo, `SELECT … FOR UPDATE`), `api.ts` (routes), `session.ts` (HMAC cookie / Bearer `API_TOKEN`), `ai.ts` + `ai-handler.ts` (shared structured Claude call + NDJSON handler), `captions-*.ts`, `plan-service.ts`, `campaigns.ts` (plans, Meta create, insights + `insights_cache`), `analytics.ts` (`AnalyticsService.overview` for `GET /api/analytics?days=7|30[&refresh=1]` + the analyze handler), `meta.ts` (Graph client), `bot/` (Telegram conversation state machine, `bot_sessions`, CAS on `(nonce, step)`), `db/` (postgres.js, PGlite, migrator), `dev-backend.ts` (in-process PGlite + seed + canned AI when no key).
 - `db/migrations/`: `001_init` (tables + atomic SQL for n8n: `claim_due_posts`, `request_approvals`, `decide_approval`, `finish_publish`, `insert_draft`, `il_now`), `002_bot` (`bot_sessions`), `003_campaign_insights` (`campaigns.meta_campaign_id`, `campaign_plans`, `insights_cache`).
 - `n8n/`: `code/*.js` are the Code-node bodies (`// @include _common.js`, `@@VAR@@`), `src/workflows.mjs` defines the 5 workflows, `workflows/*.json` are generated and committed (`n8n:check` keeps them in sync). Placeholders `__PG_CREDENTIAL_ID__` and `__TELEGRAM_CHAT_ID__` are filled from `.env` at deploy time.
 - Claude: model `claude-opus-5-5`, `client.beta.messages.stream` + `betaZodOutputFormat`, `betas: ['server-side-fallback-2026-07-01']`, `fallbacks: 'default'`. Captions use effort `medium` (env `CLAUDE_EFFORT`); plans use `high`.
@@ -87,6 +89,8 @@ TEST_DATABASE_URL=postgresql://… npx vitest run --no-file-parallelism   # DB t
 5. UI: light glass redesign, then a 3D "clay" redesign with a side rail / mobile tab bar; PWA install.
 6. Telegram Q&A bot (app-side state machine), then "post or story?" as the first question.
 7. Campaign page: AI campaign builder (organic plan → drafts, ads plan → paused Meta campaign), organic + paid insights; `meta:check`; the token re-issued on Reynovation Publisher with ads scopes; ad account Reynovation Ads.
+8. Import from Meta; Settings → connections (OAuth / token paste, scope check, account pickers).
+9. Analytics page (account-wide Instagram insights + AI analysis).
 
 ## Roadmap (agreed, not started)
 See `docs/roadmap.md`: GitHub Action auto-deploy (migrate + n8n deploy on `main`), and Telegram albums → one carousel draft.
