@@ -11,6 +11,7 @@ import { Calendar } from './views/Calendar.tsx';
 import { CampaignView } from './views/CampaignView.tsx';
 import { Library } from './views/Library.tsx';
 import { Login } from './views/Login.tsx';
+import { SettingsView } from './views/SettingsView.tsx';
 import { Studio } from './views/Studio.tsx';
 
 const NAV: { route: Route; label: string; icon: IconName }[] = [
@@ -19,6 +20,7 @@ const NAV: { route: Route; label: string; icon: IconName }[] = [
   { route: 'studio', label: 'סטודיו', icon: 'sparkles' },
   { route: 'library', label: 'קמפיינים ומוצרים', icon: 'megaphone' },
   { route: 'brand', label: 'מותג', icon: 'mic' },
+  { route: 'settings', label: 'הגדרות', icon: 'settings' },
 ];
 
 type AuthState = 'checking' | 'in' | 'out';
@@ -122,6 +124,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
         {data && route === 'library' && <Library />}
         {data && route === 'campaign' && <CampaignView id={query.get('id') ?? ''} />}
         {data && route === 'brand' && <BrandView />}
+        {data && route === 'settings' && <SettingsView query={query} />}
       </main>
     </div>
   );

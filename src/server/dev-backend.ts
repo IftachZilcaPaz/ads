@@ -9,6 +9,7 @@ import { createApi } from './api.ts';
 import { defaultCaptionDeps, handleCaptionRequest } from './captions-handler.ts';
 import { handlePlanRequest } from './plan-service.ts';
 import { CampaignService } from './campaigns.ts';
+import { ConnectionService } from './connections.ts';
 import { createMeta } from './meta.ts';
 import type { Db } from './db/db.ts';
 import { migrate } from './db/migrate.ts';
@@ -63,6 +64,13 @@ export async function createDevBackend(): Promise<(req: Request) => Promise<Resp
     secrets: () => ({ sessionSecret: process.env.SESSION_SECRET!, apiToken: process.env.API_TOKEN }),
     password: () => process.env.APP_PASSWORD ?? 'dev',
     campaigns: () => new CampaignService({ db, store, meta: (token) => createMeta(token) }),
+    connections: () =>
+      new ConnectionService({
+        db,
+        meta: (token) => createMeta(token),
+        secret: () => process.env.SESSION_SECRET!,
+        claudeConfigured: () => !!process.env.ANTHROPIC_API_KEY,
+      }),
   });
 
   const cannedCaptions = async (): Promise<Response> => {

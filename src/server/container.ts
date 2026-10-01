@@ -2,6 +2,7 @@ import { createApi } from './api.ts';
 import { Bot } from './bot/bot.ts';
 import { createTelegram } from './bot/telegram.ts';
 import { CampaignService } from './campaigns.ts';
+import { ConnectionService } from './connections.ts';
 import type { Db } from './db/db.ts';
 import { createPostgresDb } from './db/postgres.ts';
 import { createMeta } from './meta.ts';
@@ -39,4 +40,11 @@ export const api = createApi({
   password: () => requireEnv('APP_PASSWORD'),
   bot: getBot,
   campaigns: () => new CampaignService({ db: getDb(), store: getStore(), meta: (token) => createMeta(token) }),
+  connections: () =>
+    new ConnectionService({
+      db: getDb(),
+      meta: (token) => createMeta(token),
+      secret: () => requireEnv('SESSION_SECRET'),
+      claudeConfigured: () => !!readEnv('ANTHROPIC_API_KEY'),
+    }),
 });

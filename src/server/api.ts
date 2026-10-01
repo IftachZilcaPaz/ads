@@ -11,6 +11,7 @@ import {
 } from './session.ts';
 import { BotEventSchema, type Bot } from './bot/bot.ts';
 import { ApplyPostsSchema, ImportMetaSchema, SavePlanSchema, type CampaignService } from './campaigns.ts';
+import { MetaSettingsSchema, MetaTokenSchema, type ConnectionService } from './connections.ts';
 import type { Store } from './store.ts';
 
 export interface ApiDeps {
@@ -21,6 +22,8 @@ export interface ApiDeps {
   bot?: () => Bot;
   /** AI plans, Meta campaign creation and insights. */
   campaigns?: () => CampaignService;
+  /** Settings → connections (Meta login, permissions, accounts). */
+  connections?: () => ConnectionService;
 }
 
 const LoginSchema = z.object({ password: z.string().min(1).max(200) });
@@ -51,6 +54,12 @@ function clientKey(req: Request): string {
 
 export function createApi(deps: ApiDeps): Router {
   const router = new Router(deps.secrets);
+  const connections = () => {
+    if (!deps.connections) throw new HttpError(404, 'Not found');
+    return deps.connections();
+  };
+  const callbackUri = (req: Request) => `${new URL(req.url).origin}/api/connections/meta/callback`;
+  const redirect = (location: string) => new Response(null, { status: 302, headers: { location, 'cache-control': 'no-store' } });
   const campaigns = () => {
     if (!deps.campaigns) throw new HttpError(404, 'Not found');
     return deps.campaigns();
@@ -127,6 +136,32 @@ export function createApi(deps: ApiDeps): Router {
     )
     .add('PUT', '/api/brand', async ({ req }) => json(await deps.store().saveBrand(await readJson(req, RecordSchema))))
 
+    .add('GET', '/api/connections', async () => json(await connections().status()))
+    .add('GET', '/api/connections/meta/options', async () => json(await connections().options()))
+    .add('PUT', '/api/connections/meta', async ({ req }) => json(await connections().update(await readJson(req, MetaSettingsSchema))))
+    .add('POST', '/api/connections/meta/token', async ({ req }) =>
+      json(await connections().connectWithToken(await readJson(req, MetaTokenSchema))),
+    )
+    // Browser navigations (Facebook login dialog and its return), authenticated by the session cookie.
+    .add('GET', '/api/connections/meta/login', async ({ req }) => {
+      try {
+        return redirect(await connections().oauthUrl(callbackUri(req)));
+      } catch (err) {
+        return redirect(`/#/settings?meta_error=${encodeURIComponent((err instanceof Error ? err.message : String(err)).slice(0, 300))}`);
+      }
+    })
+    .add('GET', '/api/connections/meta/callback', async ({ req }) => {
+      const url = new URL(req.url);
+      const back = (query: string) => redirect(`/#/settings?${query}`);
+      const denied = url.searchParams.get('error_description') ?? url.searchParams.get('error');
+      if (denied) return back(`meta_error=${encodeURIComponent(denied.slice(0, 200))}`);
+      try {
+        await connections().oauthCallback(url.searchParams.get('code') ?? '', url.searchParams.get('state') ?? '', callbackUri(req));
+        return back('meta=connected');
+      } catch (err) {
+        return back(`meta_error=${encodeURIComponent((err instanceof Error ? err.message : String(err)).slice(0, 300))}`);
+      }
+    })
     .add('GET', '/api/meta/campaigns', async () => json(await campaigns().listMetaCampaigns()))
     .add('POST', '/api/meta/campaigns/import', async ({ req }) =>
       json(await campaigns().importFromMeta(await readJson(req, ImportMetaSchema)), { status: 201 }),

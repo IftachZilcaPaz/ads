@@ -7,6 +7,7 @@ Instagram publishing system for the owner's business (Reynovation). The owner wr
 - **Core rule: nothing publishes without approval.** Approval = `approved_at` set, or `approval_mode='auto'`. Editing caption/media/type revokes approval; moving the time does not.
 - **n8n** (on Railway): publishes on time, asks for approval in Telegram, nightly watchdog, Meta token refresh, error alerts.
 - **Telegram bot**: send a photo/video → the app runs a Q&A: post or story → campaign → product → brief → 3 AI variants → when → preview → approve. A story skips the caption questions.
+- **Settings → connections** (`#/settings`): Meta status (app, token validity/expiry, ✅/❌ per scope, Instagram account, ad account), reconnect with "Continue with Facebook" (OAuth, signed state, `config_id` for Login-for-Business apps) or by pasting an Explorer token, pickers for the Instagram/ad account, app id/secret (secret write-only), and the status of Telegram/Cloudinary/Claude/app_url. Same guard as `meta:check` (`src/server/meta-token.ts`, shared).
 - **Import from Meta** (campaigns tab): lists the ad account's campaigns and creates the picked ones locally, already linked (`meta_campaign_id`).
 - **Campaign page** (`#/campaign?id=…`): board status, organic Instagram insights per published post, paid Meta Ads insights, and "build with AI": an organic post plan (→ drafts) plus a Meta ads plan (→ a **PAUSED** campaign + ad set in Meta; ads themselves are added in Ads Manager).
 
@@ -45,7 +46,7 @@ Browser ──► Cloudinary (unsigned direct upload)        n8n ──► Insta
 - **Google Sheet**: the original data source, imported once with `db:import-sheet`; now only a backup. The import service-account key was meant to be deleted afterwards.
 
 ### `settings` table keys
-`access_token`, `access_token_refreshed_at`, `ig_user_id`, `meta_app_id`, `meta_app_secret`, `meta_ad_account_id`, `telegram_bot_token`, `telegram_chat_id`, `app_url`, `app_api_token` (= Netlify `API_TOKEN`), `cloudinary_cloud`, `cloudinary_preset`, `approval_lead_hours` (default 12). Only `cloudinary_*` ever reach the browser. Set with `npm run db:set -- <key> <value>` (secrets are masked when listed).
+`access_token`, `access_token_refreshed_at`, `ig_user_id`, `meta_app_id`, `meta_app_secret`, `meta_login_config_id` (optional, for Facebook Login for Business), `meta_ad_account_id`, `telegram_bot_token`, `telegram_chat_id`, `app_url`, `app_api_token` (= Netlify `API_TOKEN`), `cloudinary_cloud`, `cloudinary_preset`, `approval_lead_hours` (default 12). Only `cloudinary_*` ever reach the browser. Set with `npm run db:set -- <key> <value>` (secrets are masked when listed).
 
 ## Commands
 ```bash
@@ -91,6 +92,7 @@ TEST_DATABASE_URL=postgresql://… npx vitest run --no-file-parallelism   # DB t
 See `docs/roadmap.md`: GitHub Action auto-deploy (migrate + n8n deploy on `main`), and Telegram albums → one carousel draft.
 
 ### Before selling this to other businesses (owner's requirement)
+Status: the two items below now exist **for the single owner** (Settings → connections). What remains for selling is multi-tenancy (see the last paragraph) and Meta App Review.
 Today everything is single-tenant and configured from the CLI (`db:set`, `meta:check`, Graph API Explorer). To sell it, two things are **required**:
 1. **A settings screen for the Meta connection**: the customer enters their own `meta_app_id` / `meta_app_secret` (or connects through our app), then picks their Instagram account, Facebook page and ad account from lists (`me/accounts`, `me/adaccounts`). No CLI, no Graph API Explorer. Prefer "Login with Facebook" (OAuth) inside the app over pasting tokens; the app secret stays server-side only.
 2. **A permissions check in the UI** (the in-app version of `npm run meta:check`): which app the token belongs to, token validity and expiry, ✅/❌ per required scope (`instagram_basic`, `instagram_content_publish`, `instagram_manage_insights`, `pages_show_list`, `pages_read_engagement`, `ads_read`, `ads_management`, `business_management`), with a "reconnect" button that re-requests missing scopes. Keep the `meta:check --token` guard: never replace a token that can publish with one that can't.

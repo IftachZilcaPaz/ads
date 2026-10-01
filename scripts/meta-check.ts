@@ -6,21 +6,13 @@
  *   npm run meta:check -- --token <short-lived token from Graph API Explorer>
  *     exchanges it for a 60-day token (meta_app_id / meta_app_secret), saves it, then checks
  */
+import { META_SCOPES } from '../src/shared/meta-scopes.ts';
 import { createPostgresDb } from '../src/server/db/postgres.ts';
-import { createMeta, GRAPH_VERSION } from '../src/server/meta.ts';
+import { createMeta } from '../src/server/meta.ts';
+import { exchangeAndSaveToken } from '../src/server/meta-token.ts';
 import { databaseUrl, fail } from './cli-env.ts';
 
-const NEEDED: [scope: string, why: string][] = [
-  ['instagram_basic', 'פרסום ופרטי החשבון'],
-  ['instagram_content_publish', 'פרסום פוסטים'],
-  ['instagram_manage_insights', 'נתונים אורגניים בדף הקמפיין'],
-  ['pages_show_list', 'גישה לדף שמחובר לאינסטגרם'],
-  ['ads_read', 'נתוני מודעות ממומנות'],
-  ['ads_management', 'יצירת קמפיין מושהה ב-Meta'],
-];
-
-/** Without these the publisher stops working, so a new token must keep them. */
-const REQUIRED_TO_PUBLISH = ['instagram_basic', 'instagram_content_publish', 'pages_show_list'];
+const NEEDED = META_SCOPES.map((s) => [s.scope, s.label] as const);
 
 const tokenArg = process.argv.indexOf('--token');
 const newToken = tokenArg >= 0 ? process.argv[tokenArg + 1]?.trim() : undefined;
@@ -39,34 +31,14 @@ try {
   let settings = await read();
 
   if (newToken) {
-    if (!settings.meta_app_id || !settings.meta_app_secret) fail('חסרים meta_app_id / meta_app_secret בהגדרות להחלפה לטוקן ארוך');
-    const qs = new URLSearchParams({
-      grant_type: 'fb_exchange_token',
-      client_id: settings.meta_app_id,
-      client_secret: settings.meta_app_secret,
-      fb_exchange_token: newToken,
+    const saved = await exchangeAndSaveToken({
+      db,
+      appId: settings.meta_app_id ?? '',
+      appSecret: settings.meta_app_secret ?? '',
+      token: newToken,
+      force: process.argv.includes('--force'),
     });
-    const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/oauth/access_token?${qs}`);
-    const body = (await res.json()) as { access_token?: string; expires_in?: number; error?: { message?: string } };
-    if (!body.access_token) fail(`ההחלפה נכשלה: ${body.error?.message ?? res.status}`);
-
-    // Never replace a working token with one that cannot publish.
-    const probe = createMeta(body.access_token);
-    const { data: next } = await probe.get<{ data: { scopes?: string[] } }>('debug_token', { input_token: body.access_token });
-    const lost = REQUIRED_TO_PUBLISH.filter((scope) => !(next.scopes ?? []).includes(scope));
-    if (lost.length && !process.argv.includes('--force')) {
-      fail(
-        `הטוקן החדש חסר הרשאות פרסום: ${lost.join(', ')}. לא שמרתי אותו (הטוקן הקיים נשאר).\n` +
-          '  הוסף אותן ב-Graph API Explorer וצור טוקן שוב. (--force שומר בכל זאת)',
-      );
-    }
-    for (const [key, value] of [
-      ['access_token', body.access_token],
-      ['access_token_refreshed_at', new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' }).slice(0, 16)],
-    ]) {
-      await db.query('insert into settings (key, value) values ($1, $2) on conflict (key) do update set value = excluded.value', [key, value]);
-    }
-    console.log(`✅ New token saved (valid ~${Math.round((body.expires_in ?? 5_184_000) / 86400)} days; BP 4 keeps renewing it)`);
+    console.log(`✅ New token saved (valid ~${saved.days} days; BP 4 keeps renewing it)`);
     settings = await read();
   }
 
