@@ -1685,3 +1685,219 @@ textarea:disabled {
     margin-inline-start: 0;
   }
 }
+
+/* ---------- campaign page ---------- */
+.back-link {
+  display: inline-block;
+  margin: 4px 4px 0;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.campaign-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.campaign-head .row {
+  margin-top: 6px;
+}
+.btn-3d.small-btn {
+  padding: 8px 16px;
+  font-size: 13px;
+}
+.panel {
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--raise-lg);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.panel-title {
+  font-size: 18px;
+  color: var(--navy);
+}
+.panel-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.panel-grid > .panel {
+  margin-bottom: 0;
+}
+.panel-grid + .panel {
+  margin-top: 16px;
+}
+.mini-stats {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+.mini-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  text-decoration: none;
+  color: var(--ink);
+  background: linear-gradient(180deg, rgba(248, 251, 253, 0.95), rgba(230, 237, 244, 0.95));
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: var(--raise);
+}
+.mini-stat strong {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 26px;
+  line-height: 1.1;
+}
+.mini-stat span {
+  font-size: 12px;
+  color: var(--soft);
+}
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 8px;
+}
+.metric {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: var(--press);
+}
+.metric strong {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 19px;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+.metric span {
+  font-size: 11px;
+  color: var(--soft);
+}
+.insight-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.insight-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.5);
+}
+.insight-cap {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.insight-list a {
+  text-decoration: none;
+  font-weight: 700;
+}
+.planner .grid2 {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+.plan {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.plan-summary {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: linear-gradient(160deg, rgba(159, 216, 208, 0.45), rgba(109, 184, 176, 0.25));
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+.plan-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.plan-head h3 {
+  font-size: 16px;
+  color: var(--navy);
+}
+.plan-posts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+}
+.plan-post {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(248, 251, 253, 0.9), rgba(230, 237, 244, 0.9));
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: var(--raise);
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+.plan-post.on {
+  opacity: 1;
+}
+.plan-post .check {
+  align-items: center;
+}
+.plan-post .check input {
+  margin-top: 0;
+}
+.plan-idea {
+  margin: 0;
+  font-size: 12px;
+  color: var(--soft);
+}
+.plan-caption {
+  margin: 0;
+  font-size: 13px;
+  white-space: pre-line;
+  max-height: 120px;
+  overflow: auto;
+}
+@media (max-width: 1180px) {
+  .panel-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 760px) {
+  .mini-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .panel {
+    padding: 14px;
+  }
+  .plan-posts {
+    grid-template-columns: 1fr;
+  }
+}

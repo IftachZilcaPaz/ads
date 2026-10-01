@@ -1,8 +1,10 @@
 import { createApi } from './api.ts';
 import { Bot } from './bot/bot.ts';
 import { createTelegram } from './bot/telegram.ts';
+import { CampaignService } from './campaigns.ts';
 import type { Db } from './db/db.ts';
 import { createPostgresDb } from './db/postgres.ts';
+import { createMeta } from './meta.ts';
 import { readEnv, requireEnv } from './env.ts';
 import type { AuthSecrets } from './session.ts';
 import { Store } from './store.ts';
@@ -36,4 +38,5 @@ export const api = createApi({
   secrets: authSecrets,
   password: () => requireEnv('APP_PASSWORD'),
   bot: getBot,
+  campaigns: () => new CampaignService({ db: getDb(), store: getStore(), meta: (token) => createMeta(token) }),
 });

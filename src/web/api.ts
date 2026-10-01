@@ -1,9 +1,11 @@
 import type { Brand, Campaign, Product } from '../shared/catalog.ts';
+import type { AdsPlan, PlanRequest, PlanResult, PlannedPost } from '../shared/campaign-plan.ts';
 import type { CaptionRequest, CaptionResult } from '../shared/captions.ts';
+import type { CampaignInsights, MetaCreateResult, SavedPlan } from '../server/campaigns.ts';
 import type { NewPostInput, Post, PostAction, PostChanges } from '../shared/post.ts';
 import type { PublicSettings, Snapshot } from '../server/store.ts';
 
-export type { Snapshot, PublicSettings };
+export type { Snapshot, PublicSettings, CampaignInsights, MetaCreateResult, SavedPlan };
 
 export class ApiError extends Error {
   constructor(
@@ -62,50 +64,64 @@ export const api = {
     id ? request<Product>('PUT', `/api/products/${enc(id)}`, p) : request<Product>('POST', '/api/products', p),
   saveBrand: (b: Brand) => request<Brand>('PUT', '/api/brand', b),
 
-  /** Reads the NDJSON event stream from the caption edge function. */
-  async captions(req: CaptionRequest, onProgress: (chars: number) => void, signal?: AbortSignal): Promise<CaptionResult> {
-    let res: Response;
-    try {
-      res = await fetch('/api/captions', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'content-type': 'application/json', accept: 'application/x-ndjson' },
-        body: JSON.stringify(req),
-        signal: signal ?? null,
-      });
-    } catch (err) {
-      if (signal?.aborted) throw err;
-      throw new ApiError('אין חיבור לשרת', 0);
-    }
-    if (!res.ok || !res.body) {
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
-      if (res.status === 401) onUnauthorized();
-      throw new ApiError(data.error ?? `שגיאה (${res.status})`, res.status);
-    }
+  /** Streams caption variants from the caption edge function. */
+  captions: (req: CaptionRequest, onProgress: (chars: number) => void, signal?: AbortSignal) =>
+    streamAi<CaptionResult>('/api/captions', req, onProgress, signal),
+  /** Streams an AI campaign plan (organic posts + optional Meta ads plan). */
+  plan: (req: PlanRequest, onProgress: (chars: number) => void, signal?: AbortSignal) =>
+    streamAi<PlanResult>('/api/plan', req, onProgress, signal),
 
-    const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
-    let buffer = '';
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (value) buffer += value;
-      let nl: number;
-      while ((nl = buffer.indexOf('\n')) >= 0) {
-        const line = buffer.slice(0, nl).trim();
-        buffer = buffer.slice(nl + 1);
-        if (!line) continue;
-        const event = JSON.parse(line) as
-          | { type: 'progress'; chars: number }
-          | { type: 'result'; data: CaptionResult }
-          | { type: 'error'; error: string; status?: number };
-        if (event.type === 'progress') onProgress(event.chars);
-        else if (event.type === 'result') return event.data;
-        else throw new ApiError(event.error, event.status ?? 500);
-      }
-      if (done) break;
-    }
-    throw new ApiError('החיבור נקטע לפני שהתקבלה תשובה', 502);
-  },
+  campaignInsights: (id: string, refresh = false) =>
+    request<CampaignInsights>('GET', `/api/campaigns/${enc(id)}/insights${refresh ? '?refresh=1' : ''}`),
+  applyPlanPosts: (id: string, posts: PlannedPost[]) => request<Post[]>('POST', `/api/campaigns/${enc(id)}/plan/posts`, { posts }),
+  saveAdsPlan: (id: string, summary: string, ads: AdsPlan | null) =>
+    request<SavedPlan>('PUT', `/api/campaigns/${enc(id)}/plan`, { summary, ads }),
+  createInMeta: (id: string) => request<MetaCreateResult>('POST', `/api/campaigns/${enc(id)}/meta`),
 };
+
+/** Reads the NDJSON event stream of an AI edge function until its result. */
+async function streamAi<T>(path: string, body: unknown, onProgress: (chars: number) => void, signal?: AbortSignal): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json', accept: 'application/x-ndjson' },
+      body: JSON.stringify(body),
+      signal: signal ?? null,
+    });
+  } catch (err) {
+    if (signal?.aborted) throw err;
+    throw new ApiError('אין חיבור לשרת', 0);
+  }
+  if (!res.ok || !res.body) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    if (res.status === 401) onUnauthorized();
+    throw new ApiError(data.error ?? `שגיאה (${res.status})`, res.status);
+  }
+
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (value) buffer += value;
+    let nl: number;
+    while ((nl = buffer.indexOf('\n')) >= 0) {
+      const line = buffer.slice(0, nl).trim();
+      buffer = buffer.slice(nl + 1);
+      if (!line) continue;
+      const event = JSON.parse(line) as
+        | { type: 'progress'; chars: number }
+        | { type: 'result'; data: T }
+        | { type: 'error'; error: string; status?: number };
+      if (event.type === 'progress') onProgress(event.chars);
+      else if (event.type === 'result') return event.data;
+      else throw new ApiError(event.error, event.status ?? 500);
+    }
+    if (done) break;
+  }
+  throw new ApiError('החיבור נקטע לפני שהתקבלה תשובה', 502);
+}
 
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 

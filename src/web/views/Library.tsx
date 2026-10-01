@@ -9,51 +9,14 @@ import {
 import { bucketOf, type Bucket } from '../../shared/post.ts';
 import { localDate } from '../../shared/time.ts';
 import { api } from '../api.ts';
-import { EntityForm, type FieldSpec } from '../components/EntityForm.tsx';
+import { CAMPAIGN_FIELDS, PRODUCT_FIELDS, blank, type Row } from '../catalog-fields.ts';
+import { EntityForm } from '../components/EntityForm.tsx';
 import { Modal } from '../components/Modal.tsx';
 import { useApp } from '../state.tsx';
 import { BUCKET_META, cx } from '../ui.ts';
 
 type Tab = 'campaigns' | 'products';
-type Row = Record<string, string>;
-
-const ID_HINT = 'אותיות אנגליות קטנות/ספרות. אפשר לכתוב #המזהה בטלגרם כדי לשייך תמונה';
-
-const CAMPAIGN_FIELDS: FieldSpec<Row>[] = [
-  { key: 'name', label: 'שם הקמפיין', placeholder: 'למשל: מבצע חגים' },
-  { key: 'id', label: 'מזהה קצר (לא חובה)', placeholder: 'holidays', hint: ID_HINT },
-  { key: 'status', label: 'סטטוס', kind: 'select', options: [['active', 'פעיל'], ['paused', 'מושהה'], ['ended', 'הסתיים']] },
-  { key: 'cta', label: 'קריאה לפעולה', placeholder: 'שלחו הודעה לתיאום' },
-  { key: 'start_date', label: 'התחלה', kind: 'date' },
-  { key: 'end_date', label: 'סיום', kind: 'date' },
-  { key: 'goal', label: 'מטרה', kind: 'textarea', placeholder: 'לידים לשיפוץ מטבחים לפני החגים' },
-  { key: 'audience', label: 'קהל יעד', kind: 'textarea' },
-  { key: 'key_message', label: 'מסר מרכזי', kind: 'textarea' },
-  { key: 'offer', label: 'הצעה / מבצע', kind: 'textarea', hint: 'ה-AI לא ימציא מבצעים שלא כתובים כאן' },
-  { key: 'tone', label: 'טון מיוחד לקמפיין', wide: true },
-  { key: 'hashtags', label: 'האשטגים קבועים', wide: true, placeholder: '#שיפוץ #מטבח' },
-  { key: 'link', label: 'קישור', kind: 'url', wide: true },
-  { key: 'notes', label: 'הערות', kind: 'textarea' },
-];
-
-const PRODUCT_FIELDS: FieldSpec<Row>[] = [
-  { key: 'name', label: 'שם המוצר / השירות' },
-  { key: 'id', label: 'מזהה קצר (לא חובה)', hint: ID_HINT },
-  { key: 'category', label: 'קטגוריה' },
-  { key: 'price', label: 'מחיר', placeholder: 'החל מ-₪...' },
-  { key: 'status', label: 'סטטוס', kind: 'select', options: [['active', 'פעיל'], ['archived', 'בארכיון']] },
-  { key: 'url', label: 'קישור', kind: 'url' },
-  { key: 'description', label: 'תיאור', kind: 'textarea' },
-  { key: 'benefits', label: 'יתרונות מרכזיים', kind: 'textarea' },
-  { key: 'hashtags', label: 'האשטגים', wide: true },
-  { key: 'notes', label: 'הערות', kind: 'textarea' },
-];
-
 const COUNTED: Bucket[] = ['awaiting', 'approved', 'published'];
-
-function blank(columns: readonly string[]): Row {
-  return Object.fromEntries(columns.map((c) => [c, ''])) as Row;
-}
 
 export function Library() {
   const { data, run, upsertCampaign, upsertProduct } = useApp();
@@ -128,7 +91,11 @@ export function Library() {
           const c = counts.get(`${isCampaigns ? 'c' : 'p'}:${item.id}`) ?? {};
           const live = isCampaigns && isCampaignLive(item as Campaign, today);
           return (
-            <article key={item.id} class="entity-card" onClick={() => setEditing({ ...item })}>
+            <article
+              key={item.id}
+              class="entity-card"
+              onClick={() => (isCampaigns ? (location.hash = `#/campaign?id=${encodeURIComponent(item.id!)}`) : setEditing({ ...item }))}
+            >
               <header>
                 <h3>{item.name}</h3>
                 {isCampaigns ? (

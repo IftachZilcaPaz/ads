@@ -7,6 +7,9 @@
  */
 import { createApi } from './api.ts';
 import { defaultCaptionDeps, handleCaptionRequest } from './captions-handler.ts';
+import { handlePlanRequest } from './plan-service.ts';
+import { CampaignService } from './campaigns.ts';
+import { createMeta } from './meta.ts';
 import type { Db } from './db/db.ts';
 import { migrate } from './db/migrate.ts';
 import { loadMigrations } from './db/migrations-fs.ts';
@@ -59,6 +62,7 @@ export async function createDevBackend(): Promise<(req: Request) => Promise<Resp
     store: () => store,
     secrets: () => ({ sessionSecret: process.env.SESSION_SECRET!, apiToken: process.env.API_TOKEN }),
     password: () => process.env.APP_PASSWORD ?? 'dev',
+    campaigns: () => new CampaignService({ db, store, meta: (token) => createMeta(token) }),
   });
 
   const cannedCaptions = async (): Promise<Response> => {
@@ -84,10 +88,55 @@ export async function createDevBackend(): Promise<(req: Request) => Promise<Resp
     return new Response(body, { headers: { 'content-type': 'application/x-ndjson' } });
   };
 
-  return (request) =>
-    new URL(request.url).pathname.startsWith('/api/captions')
-      ? process.env.ANTHROPIC_API_KEY
-        ? handleCaptionRequest(request, defaultCaptionDeps)
-        : cannedCaptions()
-      : api.handle(request);
+  /** Without an API key, a plausible plan spread over the requested dates. */
+  const cannedPlan = async (request: Request): Promise<Response> => {
+    const input = (await request.json()) as { start_date: string; end_date: string; posts_count?: number; include_ads?: boolean };
+    const n = Math.min(input.posts_count ?? 6, 12);
+    const days = Math.max(1, Math.round((Date.parse(input.end_date) - Date.parse(input.start_date)) / 86_400_000));
+    const types = ['REEL', 'CAROUSEL', 'POST', 'STORY'] as const;
+    const posts = Array.from({ length: n }, (_, i) => ({
+      date: addDays(input.start_date, Math.floor((i * days) / n)),
+      time: i % 2 ? '08:30' : '19:30',
+      type: types[i % types.length],
+      idea: ['סרטון לפני/אחרי של מטבח שסיימנו', '5 תמונות של שלבי העבודה', 'צילום של הצוות בעבודה', 'סקר: איזה גוון ארונות?'][i % 4],
+      caption: ['מטבח מ-1985 שקיבל חיים חדשים.\nשישה שבועות, אפס הפתעות.', 'ככה נראה שיפוץ מטבח מבפנים - שלב אחרי שלב.', 'הצוות שלנו, בלי פילטרים.', 'לבן או עץ? ספרו לנו.'][i % 4],
+      hashtags: ['שיפוץמטבח', 'שיפוצסתיו'],
+      product_id: i % 2 ? 'kitchen' : '',
+      why: ['חשיפה', 'ערך', 'אמון', 'מעורבות'][i % 4],
+    }));
+    const ads = input.include_ads
+      ? {
+          objective: 'OUTCOME_LEADS',
+          objective_why: 'המטרה היא פניות לפני החגים',
+          daily_budget_ils: 50,
+          duration_days: Math.min(days, 21),
+          audience: { age_min: 30, age_max: 60, genders: 'all', locations: ['תל אביב', 'רמת גן'], interests: ['עיצוב פנים', 'שיפוץ'], description: 'בעלי דירות במרכז ששוקלים שיפוץ' },
+          ad_copies: [
+            { primary_text: 'מטבח חדש לפני החורף? מתכננים, מפרקים ומתקינים - בלוח זמנים שמחזיק.', headline: 'שיפוץ מטבח בלי הפתעות', description: 'תיאום פגישה', cta: 'SEND_MESSAGE' },
+            { primary_text: 'ראיתם את המטבח הזה לפני? גם הלקוחות שלנו לא האמינו.', headline: 'לפני ואחרי', description: 'שלחו הודעה', cta: 'CONTACT_US' },
+          ],
+          creative_tips: ['סרטון אנכי של 10-15 שניות', 'לפני/אחרי בפריים הראשון'],
+          kpis: ['עלות לליד מתחת ל-60 ₪', 'CTR מעל 1%'],
+        }
+      : null;
+    const body = new ReadableStream<Uint8Array>({
+      async start(c) {
+        const send = (e: unknown) => c.enqueue(new TextEncoder().encode(`${JSON.stringify(e)}\n`));
+        send({ type: 'progress', chars: 0 });
+        await new Promise((r) => setTimeout(r, 1200));
+        send({ type: 'result', data: { summary: 'חשיפה דרך תוצאות אמיתיות, אחר כך אמון, ובסוף הצעה ברורה לפני החגים.', posts, ads } });
+        c.close();
+      },
+    });
+    return new Response(body, { headers: { 'content-type': 'application/x-ndjson' } });
+  };
+
+  return (request) => {
+    const path = new URL(request.url).pathname;
+    if (path.startsWith('/api/captions')) {
+      return process.env.ANTHROPIC_API_KEY ? handleCaptionRequest(request, defaultCaptionDeps) : cannedCaptions();
+    }
+    if (path.startsWith('/api/plan')) return process.env.ANTHROPIC_API_KEY ? handlePlanRequest(request) : cannedPlan(request);
+    return api.handle(request);
+  };
 }

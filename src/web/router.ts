@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 
-export const ROUTES = ['board', 'calendar', 'studio', 'library', 'brand'] as const;
+export const ROUTES = ['board', 'calendar', 'studio', 'library', 'campaign', 'brand'] as const;
 export type Route = (typeof ROUTES)[number];
 
 export interface Location {

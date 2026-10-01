@@ -8,6 +8,7 @@ import { cx, greeting } from './ui.ts';
 import { Board } from './views/Board.tsx';
 import { BrandView } from './views/BrandView.tsx';
 import { Calendar } from './views/Calendar.tsx';
+import { CampaignView } from './views/CampaignView.tsx';
 import { Library } from './views/Library.tsx';
 import { Login } from './views/Login.tsx';
 import { Studio } from './views/Studio.tsx';
@@ -45,6 +46,8 @@ export function App() {
 
 function Shell({ onLogout }: { onLogout: () => void }) {
   const { route, query } = useLocation();
+  // A campaign page lives under "campaigns and products" in the navigation.
+  const navRoute = route === 'campaign' ? 'library' : route;
   const { data, loadError, reload } = useApp();
 
   const logout = async () => {
@@ -64,7 +67,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
         </a>
         <nav class="side-nav">
           {NAV.map((n) => (
-            <a key={n.route} href={`#/${n.route}`} class={cx(route === n.route && 'active')} aria-current={route === n.route ? 'page' : undefined}>
+            <a key={n.route} href={`#/${n.route}`} class={cx(navRoute === n.route && 'active')} aria-current={navRoute === n.route ? 'page' : undefined}>
               <Icon name={n.icon} size={20} />
               <span>{n.label}</span>
             </a>
@@ -117,6 +120,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
         {data && route === 'calendar' && <Calendar />}
         {data && route === 'studio' && <Studio query={query} />}
         {data && route === 'library' && <Library />}
+        {data && route === 'campaign' && <CampaignView id={query.get('id') ?? ''} />}
         {data && route === 'brand' && <BrandView />}
       </main>
     </div>

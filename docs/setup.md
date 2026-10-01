@@ -79,6 +79,17 @@ npm run db:set                  # רשימת המפתחות (ערכים סודי
 
 ה-credential של טלגרם (`ReynovationSocial`) נשאר כמו שהיה. אם n8n מסמן node באדום, בוחרים בו שוב את ה-credential.
 
+### נתונים ומודעות ממומנות (דף הקמפיין)
+
+1. `npm run db:migrate` (מוסיף את הטבלאות של תוכניות ונתונים).
+2. נתוני אינסטגרם משתמשים ב-`access_token` הקיים. הטוקן צריך הרשאת `instagram_manage_insights` (בדרך כלל כבר יש).
+3. למודעות ממומנות:
+   - מזהה חשבון המודעות (Ads Manager ← בפינה, `act_...`):
+     ```bash
+     npm run db:set -- meta_ad_account_id act_123456789
+     ```
+   - הטוקן צריך גם `ads_read` (לנתונים) ו-`ads_management` (ליצירת קמפיין). אם חסרה הרשאה, הדף מציג את השגיאה של Meta עם שם ההרשאה.
+
 ### איך ה-workflows עובדים עכשיו
 
 | Workflow | מה עושה |

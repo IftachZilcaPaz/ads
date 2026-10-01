@@ -34,6 +34,12 @@ export const CampaignSchema = z.object({
   link: text(500),
   tone: text(300),
   notes: text(2000),
+  /** Numeric campaign id in Meta Ads Manager; links paid insights. */
+  meta_campaign_id: z
+    .string()
+    .trim()
+    .refine((v) => /^\d{0,30}$/.test(v), 'מזהה קמפיין ב-Meta: ספרות בלבד')
+    .default(''),
 });
 export type Campaign = z.infer<typeof CampaignSchema>;
 export const CAMPAIGN_COLUMNS = Object.keys(CampaignSchema.shape) as (keyof Campaign)[];

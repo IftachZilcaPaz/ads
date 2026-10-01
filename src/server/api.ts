@@ -10,6 +10,7 @@ import {
   type AuthSecrets,
 } from './session.ts';
 import { BotEventSchema, type Bot } from './bot/bot.ts';
+import { ApplyPostsSchema, SavePlanSchema, type CampaignService } from './campaigns.ts';
 import type { Store } from './store.ts';
 
 export interface ApiDeps {
@@ -18,6 +19,8 @@ export interface ApiDeps {
   password: () => string;
   /** Telegram conversation, driven by n8n (Bearer API_TOKEN). */
   bot?: () => Bot;
+  /** AI plans, Meta campaign creation and insights. */
+  campaigns?: () => CampaignService;
 }
 
 const LoginSchema = z.object({ password: z.string().min(1).max(200) });
@@ -48,6 +51,10 @@ function clientKey(req: Request): string {
 
 export function createApi(deps: ApiDeps): Router {
   const router = new Router(deps.secrets);
+  const campaigns = () => {
+    if (!deps.campaigns) throw new HttpError(404, 'Not found');
+    return deps.campaigns();
+  };
 
   router
     .add(
@@ -119,6 +126,17 @@ export function createApi(deps: ApiDeps): Router {
       json(await deps.store().saveProduct(await readJson(req, RecordSchema), params.id)),
     )
     .add('PUT', '/api/brand', async ({ req }) => json(await deps.store().saveBrand(await readJson(req, RecordSchema))))
+
+    .add('GET', '/api/campaigns/:id/insights', async ({ req, params }) =>
+      json(await campaigns().insights(params.id!, new URL(req.url).searchParams.has('refresh'))),
+    )
+    .add('PUT', '/api/campaigns/:id/plan', async ({ req, params }) =>
+      json(await campaigns().savePlan(params.id!, await readJson(req, SavePlanSchema))),
+    )
+    .add('POST', '/api/campaigns/:id/plan/posts', async ({ req, params }) =>
+      json(await campaigns().applyPosts(params.id!, await readJson(req, ApplyPostsSchema)), { status: 201 }),
+    )
+    .add('POST', '/api/campaigns/:id/meta', async ({ params }) => json(await campaigns().createInMeta(params.id!), { status: 201 }))
 
     .add('POST', '/api/bot', async ({ req }) => {
       if (!deps.bot) throw new HttpError(404, 'Not found');
